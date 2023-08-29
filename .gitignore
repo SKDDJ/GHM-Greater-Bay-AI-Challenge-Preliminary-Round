@@ -1,0 +1,20 @@
+workdir/
+data/
+models/
+logs/
+log*/
+*__pycache__
+model_output/
+outputs/
+model_output_test/
+
+output_test/
+real_reg/
+
+train_data/
+
+
+## weights anf lib
+CLIP/
+.cache/
+.insightface
