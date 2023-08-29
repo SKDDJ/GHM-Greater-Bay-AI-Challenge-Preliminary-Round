@@ -89,30 +89,28 @@ def LSimple_T2I(img, clip_img, text, data_type, nnet, schedule, device, config, 
     img_n, clip_img_n = xn
     n = n.to(device)
     clip_img_n=clip_img_n.to(torch.float32)
+    t_text=torch.zeros_like(n, device=device)
+    data_type=torch.zeros_like(t_text, device=device, dtype=torch.int) + config.data_type
+    img_out, clip_img_out, text_out = nnet(img_n, clip_img_n, text, t_img=n, t_text=t_text, data_type=data_type)
     
-    print(clip_img_n.dtype)
-    print(img_n.dtype)
-   
-    img_out, clip_img_out, text_out = nnet(img_n, clip_img_n, text, t_img=n, t_text=torch.zeros_like(n, device=device), data_type=data_type)
-    
-    
+
     img_out, img_out_prior = torch.chunk(img_out, 2, dim=0)
     target, target_prior = torch.chunk(target, 2, dim=0)
 
     mask = torch.chunk(mask, 2, dim=0)[0]
     # Compute instance loss
-    aloss = F.mse_loss(img_out.float(), target.float(), reduction="none")
-    aloss = ((aloss*mask).sum([1,2,3]) / mask.sum([1,2,3])).mean()
-
+    aloss = F.mse_loss(img_out.float(), target.float(), reduction="mean")
+    
+    # aloss = ((aloss*mask).sum([1,2,3]) / mask.sum([1,2,3])).mean()
+   
     # Compute prior loss
     prior_loss = F.mse_loss(img_out_prior.float(), target_prior.float(), reduction="mean")
     
     
-    
+
     bloss = aloss + config.prior_loss_weight * prior_loss
-
-
-    return  bloss, 0.
+    
+    return  bloss
 
 
 

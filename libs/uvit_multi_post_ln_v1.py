@@ -5,6 +5,19 @@ from .timm import trunc_normal_, DropPath, Mlp
 import einops
 import torch.utils.checkpoint
 import torch.nn.functional as F
+
+""" 
+在uvit_multi_post_ln_v1.py文件中，lora_cross_attention_itot和lora_cross_attention_ttoi是两个不同的类。
+它们都是用于实现LORA（LOcality-aware Representation Adaptation）的交叉注意力模块，但是它们的输入和输出略有不同。
+
+lora_cross_attention_itot的输入是一个形状为(B, N, C)的张量，其中B是批量大小，N是序列长度，C是特征维度。
+它还接收一个形状为(B, M, C)的张量，其中M是另一个序列的长度。lora_cross_attention_itot的输出是一个形状为(B, N, C)的张量，
+表示第一个序列的每个位置的更新表示。
+
+lora_cross_attention_ttoi的输入和输出与lora_cross_attention_itot略有不同。
+它的输入是一个形状为(B, M, C)的张量和一个形状为(B, N, C)的张量，其中M和N分别是两个序列的长度。
+lora_cross_attention_ttoi的输出是一个形状为(B, M, C)的张量，表示第二个序列的每个位置的更新表示。
+"""
 class LoRALinearLayer(nn.Module):
     def __init__(self, in_features, out_features, rank=24, network_alpha=None, device='cuda:0', dtype=None):
         super().__init__()
@@ -522,7 +535,7 @@ class UViT(nn.Module):
 
         self.token_embedding = nn.Embedding(2, embed_dim)
         self.pos_embed_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-    def add_lora(self,Lora):
+    def delete_lora(self,Lora):
         self.Lora = Lora
 
     def _init_weights(self, m):
@@ -578,7 +591,7 @@ class UViT(nn.Module):
         skips = []
         count = 0
         for blk in self.in_blocks:
-            if hasattr(self, 'Lora'):
+            if not hasattr(self, 'Lora'):
                 t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
                 modelttoi = self.lora_adapters_ttoi[count]  
                 modelitot = self.lora_adapters_itot[count]

@@ -6,6 +6,15 @@
     - 其他的参数需要选手自行设定
 代码输出:
     - 微调后的模型以及其他附加的子模块
+    
+accelerate launch train.py \
+  --instance_data_dir ="目标图像的数据集路径" \
+  --outdir="自己的模型输出路径"\
+  --class_data_dir "自己的正则数据集路径" \
+  --with_prior_preservation  --prior_loss_weight=1.0 \
+  --class_prompt="girl" --num_class_images=200 \
+  --instance_prompt="photo of a <new1> girl"  \
+  --modifier_token "<new1>"
 """
 from accelerate import Accelerator
 import hashlib
@@ -140,9 +149,10 @@ def train(config):
 
 
     caption_decoder = CaptionDecoder(device=device, **config.caption_decoder)
-
+    
     nnet, optimizer = accelerator.prepare(train_state.nnet, train_state.optimizer)
     nnet.to(device)
+    
     for name,param in nnet.named_parameters():
         if name.split('.')[-1] not in ['lora_adapters_ttoi'] or ['lora_adapters_itot'] :  # 非Lora部分不计算梯度
             param.requires_grad=False
@@ -281,7 +291,7 @@ def train(config):
         original_shape = img4clip.shape
 
         new_n = original_shape[0]
-
+        #img4clip的形状传出来有问题，只有修改他的形状，具体原因还不清晰
         # 将张量改为新的形状 [new_n/3, 3, 224, 224]
         new_shape = (new_n // 3, 3, *original_shape[1:])
         
@@ -295,27 +305,28 @@ def train(config):
 
         bloss = LSimple_T2I(img=z, 
         clip_img=clip_img, text=text, data_type=data_type, nnet=nnet, schedule=schedule, device=device, config=config,mask=mask)
-        
+        bloss.requires_grad = True
         
         accelerator.backward(bloss)
         # Zero out the gradients for all token embeddings except the newly added
         # embeddings for the concept, as we only want to optimize the concept embeddings
-        if config.modifier_token is not None:
-            if accelerator.num_processes > 1:
-                grads_text_encoder = text_encoder.get_input_embeddings().weight.grad
-            else:
-                grads_text_encoder = text_encoder.get_input_embeddings().weight.grad
-            # Get the index for tokens that we want to zero the grads for
-            index_grads_to_zero = torch.arange(len(tokenizer)) != modifier_token_id[0]
-            for i in range(len(modifier_token_id[1:])):
-                index_grads_to_zero = index_grads_to_zero & (
-                    torch.arange(len(tokenizer)) != modifier_token_id[i]
-                )
-            grads_text_encoder.data[index_grads_to_zero, :] = grads_text_encoder.data[
-                index_grads_to_zero, :
-            ].fill_(0)
+        # if config.modifier_token is not None:
+        #     if accelerator.num_processes > 1:
+        #         grads_text_encoder = text_encoder.get_input_embeddings().weight.grad
+        #     else:
+        #         grads_text_encoder = text_encoder.get_input_embeddings().weight.grad
+                
+        #     # Get the index for tokens that we want to zero the grads for
+        #     index_grads_to_zero = torch.arange(len(tokenizer)) != modifier_token_id[0]
+        #     for i in range(len(modifier_token_id[1:])):
+        #         index_grads_to_zero = index_grads_to_zero & (
+        #             torch.arange(len(tokenizer)) != modifier_token_id[i]
+        #         )
+        #     grads_text_encoder.data[index_grads_to_zero, :] = grads_text_encoder.data[
+        #         index_grads_to_zero, :
+        #     ].fill_(0)
 
-## 把这里的nnet换成了 nnet 还算是微调？
+
         if accelerator.sync_gradients:
             params_to_clip = (
                 itertools.chain(text_encoder.parameters(), nnet.parameters())
@@ -341,7 +352,7 @@ def train(config):
         metrics['bloss'] = accelerator.gather(bloss.detach().mean()).mean().item()
         # metrics['loss_img'] = accelerator.gather(loss_img.detach().mean()).mean().item()
         # metrics['loss_clip_img'] = accelerator.gather(loss_clip_img.detach().mean()).mean().item()
-        metrics['scale'] = accelerator.scaler.get_scale()
+        # metrics['scale'] = accelerator.scaler.get_scale()
         metrics['lr'] = train_state.optimizer.param_groups[0]['lr']
         return metrics
 
@@ -624,4 +635,14 @@ def main():
 if __name__ == "__main__":
     main()
 
-    
+
+""" 
+accelerate launch train.py \
+  --instance_data_dir="/home/schengwei/competition/train_data/girl2" \
+  --outdir="/home/schengwei/competition/model_output/girl2"\
+  --class_data_dir "/home/schengwei/competition/real_reg/samples_person" \
+  --with_prior_preservation  --prior_loss_weight=1.0 \
+  --class_prompt="girl" --num_class_images=200 \
+  --instance_prompt="photo of a <new1> girl"  \
+  --modifier_token "<new1>"
+"""

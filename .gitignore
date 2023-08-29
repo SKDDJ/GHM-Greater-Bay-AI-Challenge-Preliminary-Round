@@ -4,14 +4,14 @@ models/
 logs/
 log*/
 *__pycache__
-model_output/
+model_output/*
 outputs/
 model_output_test/
 
 output_test/
-real_reg/
+real_reg/*
 
-train_data/
+train_data/*
 
 
 ## weights anf lib
