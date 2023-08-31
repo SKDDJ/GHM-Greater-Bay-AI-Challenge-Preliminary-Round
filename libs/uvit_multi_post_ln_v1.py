@@ -425,11 +425,11 @@ class Block(nn.Module):
 
     def _forward(self, x, skip, lora_input_img, lora_input_text):
         if self.skip_linear is not None:
-            print("运行outblock")
+    
             x = self.skip_linear(torch.cat([x, skip], dim=-1))
             x = self.norm1(x)
         if lora_input_text is not None and lora_input_img is not None:
-            print("载入img以及text")
+    
             x = x + self.drop_path(self.attn(x))
             t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, 77, 1, 1024), dim=1)
             text= text + lora_input_text

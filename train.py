@@ -177,6 +177,7 @@ def train(config):
         pretrained_model_name_or_path, subfolder="text_encoder", revision=config.revision
     )
     text_encoder.to(device)
+    clip_text_model = CLIPEmbedder(version=config.clip_text_model, device=device)
     clip_img_model, clip_img_model_preprocess = clip.load(config.clip_img_model, jit=False)
     clip_img_model.to(device).eval().requires_grad_(False)
     
@@ -188,13 +189,13 @@ def train(config):
 
     if args.modifier_token is not None:
         
-        args.modifier_token = config.modifier_token.split("+")#['<new1>']
+        args.modifier_token = args.modifier_token.split("+")#['<new1>']
         args.initializer_token = config.initializer_token.split("+")#['ktn', 'pll', 'ucd']
 
         if len(args.modifier_token) > len(args.initializer_token):
             raise ValueError("You must specify + separated initializer token for each modifier token.")
         for modifier_token, initializer_token in zip(
-            args.modifier_token, args.initializer_token[: len(config.modifier_token)]
+            args.modifier_token, args.initializer_token[: len(args.modifier_token)]
         ):
             # Add the placeholder token in tokenizer
             #在添加占位符标记时，通常会将占位符添加到词汇表（vocabulary）中，
@@ -208,7 +209,8 @@ def train(config):
                 )
 
             # Convert the initializer_token, placeholder_token to ids
-            token_ids = tokenizer.encode([initializer_token], add_special_tokens=False)
+            token_ids = clip_text_model.tokenizer.encode([initializer_token], add_special_tokens=False)
+            
             #[42170]
             #ktn
             
@@ -291,7 +293,7 @@ def train(config):
         original_shape = img4clip.shape
 
         new_n = original_shape[0]
-        #img4clip的形状传出来有问题，只有修改他的形状，具体原因还不清晰
+        #TODO img4clip的形状传出来有问题，只有修改他的形状，具体原因还不清晰
         # 将张量改为新的形状 [new_n/3, 3, 224, 224]
         new_shape = (new_n // 3, 3, *original_shape[1:])
         
@@ -330,7 +332,7 @@ def train(config):
         if accelerator.sync_gradients:
             params_to_clip = (
                 itertools.chain(text_encoder.parameters(), nnet.parameters())
-                if config.modifier_token is not None
+                if args.modifier_token is not None
                 else nnet.parameters()
             )
             accelerator.clip_grad_norm_(params_to_clip, config.max_grad_norm)
@@ -392,11 +394,12 @@ def train(config):
                     logging.info(f'Save and eval checkpoint {total_step}...')
                     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                     save_step += config.save_interval
-                    save_new_embed(text_encoder, modifier_token_id, accelerator, config, config.outdir)
+                   
 
 
             if total_step  >= config.max_step:
                 logging.info(f"saving final ckpts to {config.outdir}...")
+                save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                 train_state.save(os.path.join(config.outdir, 'final.ckpt'))
                 break
 
@@ -547,79 +550,6 @@ def main():
     config.nnet_path = args.nnet_path
     os.makedirs(config.workdir, exist_ok=True)
 
-
-    # with open(concepts_list, "r") as f:
-    #     concepts_list = json.load(f)
-        
-#    # Generate class images if prior preservation is enabled.
-#     if config.with_prior_preservation:
-#         for i, concept in enumerate(concepts_list):
-#             # 目录文件处理
-#             class_images_dir = Path(concept["class_data_dir"])
-#             if not class_images_dir.exists():
-#                 class_images_dir.mkdir(parents=True, exist_ok=True)
-#             if config.real_prior:
-#                 assert (
-#                     class_images_dir / "images"
-#                 ).exists(), f"Please run: python retrieve.py --class_prompt \"{concept['class_prompt']}\" --class_data_dir {class_images_dir} --num_class_images {config.num_class_images}"
-#                 assert (
-#                     len(list((class_images_dir / "images").iterdir())) == config.num_class_images
-#                 ), f"Please run: python retrieve.py --class_prompt \"{concept['class_prompt']}\" --class_data_dir {class_images_dir} --num_class_images {config.num_class_images}"
-#                 assert (
-#                     class_images_dir / "caption.txt"
-#                 ).exists(), f"Please run: python retrieve.py --class_prompt \"{concept['class_prompt']}\" --class_data_dir {class_images_dir} --num_class_images {config.num_class_images}"
-#                 assert (
-#                     class_images_dir / "images.txt"
-#                 ).exists(), f"Please run: python retrieve.py --class_prompt \"{concept['class_prompt']}\" --class_data_dir {class_images_dir} --num_class_images {config.num_class_images}"
-#                 concept["class_prompt"] = os.path.join(class_images_dir, "caption.txt")
-#                 concept["class_data_dir"] = os.path.join(class_images_dir, "images.txt")
-#                 concepts_list[i] = concept
-#                 accelerator.wait_for_everyone()
-#             else:
-#                 cur_class_images = len(list(class_images_dir.iterdir()))
-
-#                 if cur_class_images < config.num_class_images:
-#                     torch_dtype = torch.float16 if accelerator.device.type == "cuda" else torch.float32
-#                     if config.prior_generation_precision == "fp32":
-#                         torch_dtype = torch.float32
-#                     elif config.prior_generation_precision == "fp16":
-#                         torch_dtype = torch.float16
-#                     elif config.prior_generation_precision == "bf16":
-#                         torch_dtype = torch.bfloat16
-#                     pipeline = DiffusionPipeline.from_pretrained(
-#                         config.pretrained_model_name_or_path,
-#                         torch_dtype=torch_dtype,
-#                         safety_checker=None,
-#                         revision=config.revision,
-#                     )
-#                     pipeline.set_progress_bar_config(disable=True)
-
-#                     num_new_images = config.num_class_images - cur_class_images
-#                     logger.info(f"Number of class images to sample: {num_new_images}.")
-
-#                     sample_dataset = PromptDataset(config.class_prompt, num_new_images)
-#                     sample_dataloader = torch.utils.data.DataLoader(sample_dataset, batch_size=config.sample_batch_size)
-
-#                     sample_dataloader = accelerator.prepare(sample_dataloader)
-#                     pipeline.to(accelerator.device)
-
-#                     for example in tqdm(
-#                         sample_dataloader,
-#                         desc="Generating class images",
-#                         disable=not accelerator.is_local_main_process,
-#                     ):
-#                         images = pipeline(example["prompt"]).images
-
-#                         for i, image in enumerate(images):
-#                             hash_image = hashlib.sha1(image.tobytes()).hexdigest()
-#                             image_filename = (
-#                                 class_images_dir / f"{example['index'][i] + cur_class_images}-{hash_image}.jpg"
-#                             )
-#                             image.save(image_filename)
-
-#                     del pipeline
-#                     if torch.cuda.is_available():
-#                         torch.cuda.empty_cache()
 
 
 

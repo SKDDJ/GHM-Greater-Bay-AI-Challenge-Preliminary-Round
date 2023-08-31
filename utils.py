@@ -82,7 +82,7 @@ def ema(model_dest: nn.Module, model_src: nn.Module, rate):
 
 class TrainState(object):
     def __init__(self, optimizer, lr_scheduler, step, nnet=None, nnet_ema=None, 
-                 lorann=None, t2i_adapter=None):
+                 lorann=None, t2i_adapter=None,text_embedding = None):
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.step = step
@@ -90,7 +90,7 @@ class TrainState(object):
         self.nnet_ema = nnet_ema
         self.lorann = lorann
         self.t2i_adapter = t2i_adapter
-
+        self.text_embedding = text_embedding
     def ema_update(self, rate=0.9999):
         if self.nnet_ema is not None:
             ema(self.nnet_ema, self.nnet, rate)
@@ -141,7 +141,7 @@ def initialize_train_state(config, device, uvit_class):
     lr_scheduler = get_lr_scheduler(optimizer, **config.lr_scheduler)
 
     train_state = TrainState(optimizer=optimizer, lr_scheduler=lr_scheduler, step=0,
-                             nnet=nnet, nnet_ema=nnet_ema)
+                             nnet=nnet, nnet_ema=nnet_ema, text_embedding=clip_text_model.transformer.get_input_embeddings())
     train_state.ema_update(0)
     train_state.to(device)
     # no need to resume

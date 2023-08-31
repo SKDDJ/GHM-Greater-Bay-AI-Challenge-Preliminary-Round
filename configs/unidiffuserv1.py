@@ -21,7 +21,11 @@ def get_config():
     config.log_interval = 50
     config.eval_interval = 100
     config.save_interval = 300
-    config.max_step = 400
+    # config.max_step = 400
+    
+    config.max_step = 250
+    config.batch_size = 1
+    
     config.center_crop = True
     config.real_prior = True
     config.reversion = None
@@ -35,11 +39,14 @@ def get_config():
     config.sample_batch_size = 4
     config.revision = None
     config.num_workers = 10
-    config.batch_size = 6
+    # config.batch_size = 6
+    
+    
     config.resolution = 512
     
     config.clip_img_model = "ViT-B/32"
-    config.clip_text_model = "openai/clip-vit-large-patch14"
+    # config.clip_text_model = "openai/clip-vit-large-patch14"
+    config.clip_text_model = "/home/schengwei/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
     
     config.only_load_model = True
     
