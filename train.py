@@ -142,8 +142,19 @@ def train(config):
                 concepts_list[i] = concept
                 accelerator.wait_for_everyone()
             
-
-    train_state = utils.initialize_train_state(config, device, uvit_class=UViT)
+    pretrained_model_name_or_path = "/home/schengwei/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
+    tokenizer = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path,
+            subfolder="tokenizer",
+            revision = None,
+            use_fast=False,
+            )
+    text_encoder_cls = import_model_class_from_model_name_or_path(pretrained_model_name_or_path , config.revision)
+    text_encoder = text_encoder_cls.from_pretrained(
+        pretrained_model_name_or_path, subfolder="text_encoder", revision=config.revision
+    )
+    text_encoder.to(device)
+    train_state = utils.initialize_train_state(config, device, uvit_class=UViT,text_encoder = text_encoder)
     logging.info(f'load nnet from {config.nnet_path}')
     train_state.nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'), False)
 
@@ -165,19 +176,8 @@ def train(config):
     # Modify the code of custom diffusion to directly import the clip text encoder 
     # instead of freezing all parameters.
     # clip_text_model = CLIPEmbedder(version=config.clip_text_model, device=device)
-    pretrained_model_name_or_path = "/home/schengwei/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
-    tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path,
-            subfolder="tokenizer",
-            revision = None,
-            use_fast=False,
-            )
-    text_encoder_cls = import_model_class_from_model_name_or_path(pretrained_model_name_or_path , config.revision)
-    text_encoder = text_encoder_cls.from_pretrained(
-        pretrained_model_name_or_path, subfolder="text_encoder", revision=config.revision
-    )
-    text_encoder.to(device)
-    clip_text_model = CLIPEmbedder(version=config.clip_text_model, device=device)
+
+    # clip_text_model = CLIPEmbedder(version=config.clip_text_model, device=device)
     clip_img_model, clip_img_model_preprocess = clip.load(config.clip_img_model, jit=False)
     clip_img_model.to(device).eval().requires_grad_(False)
     
@@ -209,7 +209,7 @@ def train(config):
                 )
 
             # Convert the initializer_token, placeholder_token to ids
-            token_ids = clip_text_model.tokenizer.encode([initializer_token], add_special_tokens=False)
+            token_ids = tokenizer.encode([initializer_token], add_special_tokens=False)
             
             #[42170]
             #ktn
@@ -220,7 +220,7 @@ def train(config):
             
             initializer_token_id.append(token_ids[0])
             modifier_token_id.append(tokenizer.convert_tokens_to_ids(modifier_token))
-            
+            print("modifier_token_id",modifier_token_id)
         
         
         # Resize the token embeddings as we are adding new special tokens to the tokenizer
@@ -265,7 +265,6 @@ def train(config):
                                       shuffle=True,
                                       collate_fn=lambda examples: collate_fn(examples, args.with_prior_preservation),
                                       num_workers=config.dataloader_num_workers,
-                                      pin_memory=True,
                                       drop_last=True
                                       )
 
@@ -280,7 +279,26 @@ def train(config):
     _betas = stable_diffusion_beta_schedule()
     schedule = Schedule(_betas)
     logging.info(f'use {schedule}')
+    for name, param in nnet.named_parameters():
+            param.requires_grad = True
+    for name, param in nnet.named_parameters():
+        if 'lora_adapters_itot' not in name and 'lora_adapters_ttoi' not in name:
+            param.requires_grad = False
+    for name, param in nnet.named_parameters():
+        if 'text_embed' in name or 'token_embedding' in name:
+            param.requires_grad = True
+    
+    # 验证哪些参数被冻结
+    for name, param in text_encoder.named_parameters():
+        if  param.requires_grad:
+            print(f"未冻结的参数: {name}")
 
+    total_frozen_params = sum(p.numel() for p in text_encoder.parameters() if  p.requires_grad)
+    print("未冻结参数量:",total_frozen_params)
+    # 77560320 lora_adapter+text_embedding  37946112 token_embedding
+    # INFO - nnet has 1029970000 parameters
+    # INFO - text_encoder has 123060480 parameters
+    
     def train_step():
         metrics = dict()
         
@@ -307,7 +325,7 @@ def train(config):
 
         bloss = LSimple_T2I(img=z, 
         clip_img=clip_img, text=text, data_type=data_type, nnet=nnet, schedule=schedule, device=device, config=config,mask=mask)
-        bloss.requires_grad = True
+        # bloss.requires_grad = True
         
         accelerator.backward(bloss)
         # Zero out the gradients for all token embeddings except the newly added
@@ -336,15 +354,16 @@ def train(config):
                 else nnet.parameters()
             )
             accelerator.clip_grad_norm_(params_to_clip, config.max_grad_norm)
-                   
-        optimizer_class = torch.optim.AdamW
-        optimizer = optimizer_class(
-        itertools.chain(text_encoder.get_input_embeddings().parameters(), nnet.parameters())
-        if args.modifier_token is not None
-        else nnet.parameters(),
-    )
+        for name, param in nnet.named_parameters():
+            if param.grad is None:
+                print(name)
+        for name, param in text_encoder.named_parameters():
+            if param.grad is None:
+                print(name)
+        exit()
         #  更新参数
         optimizer.step()
+
         lr_scheduler.step()
         
         train_state.ema_update(config.get('ema_rate', 0.9999))
@@ -358,24 +377,25 @@ def train(config):
         metrics['lr'] = train_state.optimizer.param_groups[0]['lr']
         return metrics
 
-    @torch.no_grad()
-    @torch.autocast(device_type='cuda')
-    def eval(total_step):
-        """
-        write evaluation code here
-        """
+    # @torch.no_grad()
+    # @torch.autocast(device_type='cuda')
+    # def eval(total_step):
+    #     """
+    #     write evaluation code here
+    #     """
 
-        return
+    #     return
 
     def loop():
         log_step = 0
-        eval_step = 0
+        eval_step = 100000
         save_step = config.save_interval
+        
         while True:
             nnet.train()
             with accelerator.accumulate(nnet):
                 metrics = train_step()
-                
+            print("metrics",metrics)
             accelerator.wait_for_everyone()
             
             if accelerator.is_main_process:
@@ -397,7 +417,7 @@ def train(config):
                    
 
 
-            if total_step  >= config.max_step:
+            if total_step  >= 500:
                 logging.info(f"saving final ckpts to {config.outdir}...")
                 save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                 train_state.save(os.path.join(config.outdir, 'final.ckpt'))

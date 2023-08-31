@@ -23,7 +23,7 @@ def get_config():
     config.save_interval = 300
     # config.max_step = 400
     
-    config.max_step = 250
+    config.max_step = 1000
     config.batch_size = 1
     
     config.center_crop = True
@@ -36,7 +36,7 @@ def get_config():
     
     config.dataloader_num_workers = 10
     
-    config.sample_batch_size = 4
+   #  config.sample_batch_size = 4  it seems uesless...
     config.revision = None
     config.num_workers = 10
     # config.batch_size = 6
@@ -95,14 +95,15 @@ def get_config():
 
 
     # sample
+
     config.mode = "t2i"
-    config.n_samples = 2
-    config.n_iter = 6
+    config.n_samples = 9 # control the numbers of generating images 
+    config.n_iter = 1 # 过多的迭代次数可能导致过拟合或生成的样本过于接近训练数据
     config.nrow = 4
     config.sample = d(
-        sample_steps=30,
+        sample_steps=100, # 我从 30 调到了 100
         scale=7.,
-        t2i_cfg_mode='true_uncond'
+        t2i_cfg_mode='true_uncond' # 笑死，之前用的是true_uncond模式，生成的图片能看才见鬼
     )
 
     return config

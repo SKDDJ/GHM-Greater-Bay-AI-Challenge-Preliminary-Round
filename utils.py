@@ -127,21 +127,22 @@ class TrainState(object):
 def cnt_params(model):
     return sum(param.numel() for param in model.parameters())
 
-
-def initialize_train_state(config, device, uvit_class):
-    clip_text_model = CLIPEmbedder(version=config.clip_text_model, device=device)
+def initialize_train_state(config, device, uvit_class,text_encoder = None):
+    
     params = []
     nnet = uvit_class(**config.nnet)
-    params = list(itertools.chain(clip_text_model.transformer.get_input_embeddings().parameters(), nnet.lora_adapters_itot.parameters(), nnet.lora_adapters_ttoi.parameters()))
+    
+    params = list(itertools.chain(text_encoder.get_input_embeddings().parameters(), nnet.lora_adapters_itot.parameters(), nnet.lora_adapters_ttoi.parameters()))
     nnet_ema = uvit_class(**config.nnet)
     nnet_ema.eval()
     logging.info(f'nnet has {cnt_params(nnet)} parameters')
-
+    logging.info(f'text_encoder has {cnt_params(text_encoder)} parameters')
+  
     optimizer = get_optimizer(params, **config.optimizer)
     lr_scheduler = get_lr_scheduler(optimizer, **config.lr_scheduler)
 
     train_state = TrainState(optimizer=optimizer, lr_scheduler=lr_scheduler, step=0,
-                             nnet=nnet, nnet_ema=nnet_ema, text_embedding=clip_text_model.transformer.get_input_embeddings())
+                             nnet=nnet, nnet_ema=nnet_ema, text_embedding=text_encoder.get_input_embeddings())
     train_state.ema_update(0)
     train_state.to(device)
     # no need to resume

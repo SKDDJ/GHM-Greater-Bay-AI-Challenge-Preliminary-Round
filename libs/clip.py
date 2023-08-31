@@ -206,6 +206,7 @@ class FrozenCLIPEmbedder(AbstractEncoder):
                             subfolder=subfolder,
                             user_agent=user_agent,
                         )
+                        print("开始加载safetensor")
                         state_dict = safetensors.torch.load_file(model_file, device="cpu")
                     except Exception as e:
                         if not allow_pickle:
@@ -279,6 +280,7 @@ class FrozenCLIPEmbedder(AbstractEncoder):
 
             # add tokens and get ids
             self.tokenizer.add_tokens(tokens)
+            
             token_ids = self.tokenizer.convert_tokens_to_ids(tokens)
             token_ids_and_embeddings += zip(token_ids, embeddings)
 
@@ -286,6 +288,7 @@ class FrozenCLIPEmbedder(AbstractEncoder):
 
         # resize token embeddings and set all new embeddings
         self.text_encoder.resize_token_embeddings(len(self.tokenizer))
+   
         for token_id, embedding in token_ids_and_embeddings:
             self.text_encoder.get_input_embeddings().weight.data[token_id] = embedding
 

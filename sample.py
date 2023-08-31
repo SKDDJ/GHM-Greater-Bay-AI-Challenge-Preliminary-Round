@@ -118,6 +118,10 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
             config.sample.t2i_cfg_mode == 'empty_token': using the original cfg with the empty string
             config.sample.t2i_cfg_mode == 'true_uncond: using the unconditional model learned by our method
         3. return linear combination of conditional output and unconditional output
+        
+        'empty_token' 模式：在这种模式下，使用原始配置和空字符串来生成图像。这意味着生成的图像不受与之相关的文本信息的约束，生成的结果更加自由和多样化。
+
+        'true_uncond' 模式：在这种模式下，使用通过我们方法学习到的无条件模型来生成图像。这意味着生成的图像不依赖于与之相关的文本信息，生成的结果更加无条件和独立。
         """
         z, clip_img = split(x)
 
@@ -276,11 +280,12 @@ def main(argv=None):
     set_seed(42)
     config = get_config()
     args = get_args()
+    
+    # config.n_iter = 6
+    # config.n_samples = 9
+    
     config.output_path = args.output_path
     config.nnet_path = os.path.join(args.restore_path, "final.ckpt",'nnet.pth')
-    # config.nnet_path = args.restore_path
-    config.n_samples = 3
-    config.n_iter = 1
     device = "cuda"
 
     # init models
@@ -290,7 +295,7 @@ def main(argv=None):
     autoencoder = libs.autoencoder.get_model(**config.autoencoder)
     clip_text_model = FrozenCLIPEmbedder(version=config.clip_text_model, device=device)
     clip_text_model.to(device)
-    clip_text_model.load_textual_inversion(args.weight_dir, weight_name="<new1>.bin")
+    clip_text_model.load_textual_inversion(args.weight_dir, token = "<new1>" , weight_name="<new1>.bin")
     
     nnet_mapping_dict = {}
     autoencoder_mapping_dict = {}

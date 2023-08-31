@@ -76,6 +76,9 @@ def get_config():
 
 
     # sample
+    config.mode = "t2i"
+    config.n_samples = 9 # control the numbers of generating images 
+    config.n_iter = 1 # 过多的迭代次数可能导致过拟合或生成的样本过于接近训练数据
     config.sample = d(
         sample_steps=30,
         scale=7.,
