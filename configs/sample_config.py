@@ -1,5 +1,5 @@
 import ml_collections
-
+import random
 
 def d(**kwargs):
     """Helper of creating a config dict."""
@@ -8,8 +8,11 @@ def d(**kwargs):
 
 def get_config():
     config = ml_collections.ConfigDict()
-
-    config.seed = 1234
+    
+    
+    
+    config.seed = 3214
+    # config.seed = random.randint(500, 2000) # generate a random seed
     config.pred = 'noise_pred'
     config.z_shape = (4, 64, 64)
     config.clip_img_dim = 512
@@ -80,9 +83,9 @@ def get_config():
     config.n_samples = 9 # control the numbers of generating images 
     config.n_iter = 1 # 过多的迭代次数可能导致过拟合或生成的样本过于接近训练数据
     config.sample = d(
-        sample_steps=30,
-        scale=7.,
-        t2i_cfg_mode='true_uncond'
+        sample_steps=200,
+        scale=7., # scale of the text embedding 1就挺好， 0.1 不像
+        t2i_cfg_mode='true_uncond', # 'empty_token' or 'true_uncond'
     )
 
     return config

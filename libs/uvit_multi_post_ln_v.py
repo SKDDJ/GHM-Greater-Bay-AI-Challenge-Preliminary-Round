@@ -5,6 +5,8 @@ from .timm import trunc_normal_, DropPath, Mlp
 import einops
 import torch.utils.checkpoint
 import torch.nn.functional as F
+import loralib as lora
+
 class LoRALinearLayer(nn.Module):
     def __init__(self, in_features, out_features, rank=24, network_alpha=None, device='cuda:0', dtype=None):
         super().__init__()
@@ -34,7 +36,7 @@ class LoRALinearLayer(nn.Module):
         return up_hidden_states.to(orig_dtype)
 
 class lora_cross_attention_ttoi(nn.Module):
-    def __init__(self, img_dim=1024, rank=24, text_dim=77, heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,proj_drop=0., hidden_size=1536, dropout = 0.0, network_alpha=None):
+    def __init__(self, img_dim=1024, rank=24, text_dim=77, heads=8, qkv_bias=False, qk_scale=None, attn_dorp=0.,proj_drop=0., hidden_size=1536, dropout = 0.0, network_alpha=None):
 
         super().__init__()
         self.heads = heads
@@ -46,9 +48,9 @@ class lora_cross_attention_ttoi(nn.Module):
         self.to_q_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
         self.to_k_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
         self.to_v_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.to_out_custom_diffusion = nn.ModuleList([])
+        self.to_out_custom_diffusion.append(nn.Linear(hidden_size, hidden_size, bias=True))
+        self.to_out_custom_diffusion.append(nn.Dropout(dropout))
     
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
@@ -154,15 +156,15 @@ class lora_cross_attention_ttoi(nn.Module):
         hidden_states = self.batch_to_head_dim(hidden_states)
     
         # linear proj
-        hidden_states = self.to_out_lora(hidden_states)
+        hidden_states = self.to_out_custom_diffusion[0](hidden_states)
         
         # dropout
-        hidden_states = self.proj_drop(hidden_states)
+        hidden_states = self.to_out_custom_diffusion[1](hidden_states)
         
         return hidden_states
     
 class lora_cross_attention_itot(nn.Module):
-    def __init__(self, img_dim=1024, rank=24, text_dim=77, heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.,proj_drop=0., hidden_size=1536, dropout = 0.0, network_alpha=None):
+    def __init__(self, img_dim=1024, rank=24, text_dim=77, heads=8, qkv_bias=False, qk_scale=None, attn_dorp=0.,proj_drop=0., hidden_size=1536, dropout = 0.0, network_alpha=None):
 
         super().__init__()
         self.heads = heads
@@ -174,9 +176,9 @@ class lora_cross_attention_itot(nn.Module):
         self.to_q_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
         self.to_k_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
         self.to_v_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.to_out_custom_diffusion = nn.ModuleList([])
+        self.to_out_custom_diffusion.append(nn.Linear(hidden_size, hidden_size, bias=True))
+        self.to_out_custom_diffusion.append(nn.Dropout(dropout))
     
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
@@ -282,10 +284,10 @@ class lora_cross_attention_itot(nn.Module):
         hidden_states = self.batch_to_head_dim(hidden_states)
     
         # linear proj
-        hidden_states = self.to_out_lora(hidden_states)
+        hidden_states = self.to_out_custom_diffusion[0](hidden_states)
         
         # dropout
-        hidden_states = self.proj_drop(hidden_states)
+        hidden_states = self.to_out_custom_diffusion[1](hidden_states)
  
         return hidden_states
 
@@ -352,7 +354,8 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+ #       self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.qkv = lora.MergedLinear(dim, dim * 3, r=8, enable_lora=[True, True, True])
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -441,7 +444,7 @@ class Block(nn.Module):
         super().__init__()
         self.norm1 = norm_layer(dim) if skip else None
         self.norm2 = norm_layer(dim)
-        self.lora_attention = LoraAttention(dim, num_heads=num_heads,qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+        #self.lora_attention = LoraAttention(dim, num_heads=num_heads,qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -459,45 +462,21 @@ class Block(nn.Module):
         else:
             return self._forward(x, skip, lora_input_img, lora_input_text)
 
-    def _forward(self, x, skip, lora_input_img, lora_input_text):
-        if not hasattr (self,'lora_attn'):
-            if self.skip_linear is not None:
-                x = self.skip_linear(torch.cat([x, skip], dim=-1))
-                x = self.norm1(x)
-            # if lora_input_text is not None and lora_input_img is not None:      
-            #     x = x + self.drop_path(self.attn(x))
-            #     t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, 77, 1, 1024), dim=1)
-            #     #text= text + lora_input_text
-            #     img= img + lora_input_img
-            #     x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)
-            #     x = self.norm2(x)
-            # else:
-                # print("lora_attention",self.lora_attention.to_q_lora.up.weight)
-                # exit()
-            x_attention = self.lora_attention(x)
-            x = x + self.drop_path(self.attn(x))+ x_attention
-            x = self.norm2(x)
-
-            x = x + self.drop_path(self.mlp(x))
-            x = self.norm3(x)
+    def forward(self, x, skip=None):
+        if self.use_checkpoint:
+            return torch.utils.checkpoint.checkpoint(self._forward, x, skip)
         else:
-            if self.skip_linear is not None:
-                x = self.skip_linear(torch.cat([x, skip], dim=-1))
-                x = self.norm1(x)
-            if lora_input_text is not None and lora_input_img is not None:
-                
-                x = x + self.drop_path(self.attn(x))
-                t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, 77, 1, 1024), dim=1)
-                text= text + lora_input_text
-                img= img + lora_input_img
-                x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)
-                x = self.norm2(x)
-            else:
-                x = x + self.drop_path(self.attn(x))
-                x = self.norm2(x)
+            return self._forward(x, skip)
 
-            x = x + self.drop_path(self.mlp(x))
-            x = self.norm3(x)
+    def _forward(self, x, skip=None):
+        if self.skip_linear is not None:
+            x = self.skip_linear(torch.cat([x, skip], dim=-1))
+            x = self.norm1(x)
+        x = x + self.drop_path(self.attn(x))
+        x = self.norm2(x)
+
+        x = x + self.drop_path(self.mlp(x))
+        x = self.norm3(x)
 
         return x
 
@@ -527,6 +506,8 @@ class UViT(nn.Module):
         self.in_chans = in_chans
         self.patch_size = patch_size
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
+
+      
         
         self.patch_embed = PatchEmbed(patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         self.img_size = (img_size, img_size) if isinstance(img_size, int) else img_size  # the default img size
@@ -579,13 +560,6 @@ class UViT(nn.Module):
 
         trunc_normal_(self.pos_embed, std=.02)
         self.apply(self._init_weights)
-        self.lora_adapters_itot = nn.ModuleList()
-        # for _ in range(30):
-        #     self.lora_adapters_itot.append(lora_cross_attention_itot())
-        
-        # self.lora_adapters_ttoi = nn.ModuleList()
-        # for _ in range(30):
-        #     self.lora_adapters_ttoi.append(lora_cross_attention_ttoi())
         
         # print("lora_attention",self.in_blocks[0].lora_attention.to_q_lora.up.weight)
         # exit()
@@ -647,41 +621,14 @@ class UViT(nn.Module):
         skips = []
         count = 0
         for blk in self.in_blocks:
-            if  hasattr(self, 'Lora'):
-                t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
-                modelttoi = self.lora_adapters_ttoi[count]  
-                modelitot = self.lora_adapters_itot[count]
-                modelttoi.to('cuda')
-                modelitot.to('cuda')
-            
-                lora_img = modelttoi(img,text)  
-                lora_text = modelitot(img,text)
-                x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)            
-                x = blk(x, skip = None, lora_input_img = lora_img,lora_input_text = lora_text)    
-                count += 1           
-            else:
-                x = blk(x)
-                count += 1
+            x = blk(x)
+            count += 1
             skips.append(x)
    
         x = self.mid_block(x)
 
         for blk in self.out_blocks:
-            if hasattr(self, 'Lora'):
-                t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
-                modelttoi = self.lora_adapters_ttoi[count]  
-                modelitot = self.lora_adapters_itot[count]
-               
-                modelttoi.to('cuda')
-                modelitot.to('cuda')
-                lora_img = modelttoi(img,text)  
-                lora_text = modelitot(img,text)
-                x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)            
-                x = blk(x, skip = skips.pop(), lora_input_img = lora_img,lora_input_text = lora_text)    
-                count += 1
-            else:
-                x = blk(x, skip = skips.pop(), lora_input_img = None, lora_input_text = None)
-                count += 1
+            x = blk(x, skip = skips.pop())
 
         x = self.norm(x)
 

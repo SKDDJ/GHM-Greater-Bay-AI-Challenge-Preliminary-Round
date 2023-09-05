@@ -16,6 +16,7 @@ accelerate launch train.py \
   --instance_prompt="photo of a <new1> girl"  \
   --modifier_token "<new1>"
 """
+import math 
 from accelerate import Accelerator
 import hashlib
 import warnings
@@ -37,7 +38,7 @@ import datetime
 from transformers import AutoTokenizer,PretrainedConfig
 from pathlib import Path
 from libs.data import PersonalizedBase, PromptDataset, collate_fn
-from libs.uvit_multi_post_ln_v1 import UViT
+from libs.uvit_multi_post_ln_v1v import UViT
 import diffusers
 from diffusers import DiffusionPipeline
 from accelerate import Accelerator
@@ -50,9 +51,38 @@ import tqdm
 from accelerate.logging import get_logger 
 import itertools
 import json
+from torch import nn
 #from pathos.multiprocessing import ProcessingPool as Pool
 
+class LoraLayer(nn.Module):
+    def __init__(self,raw_linear,in_features,out_features,r,alpha):
+        super().__init__()
+        self.r=r 
+        self.alpha=alpha
+        self.lora_a=nn.Parameter(torch.empty((in_features,r)))
+        self.lora_b=nn.Parameter(torch.zeros((r,out_features)))
+    
+        nn.init.kaiming_uniform_(self.lora_a,a=math.sqrt(5))
 
+        self.raw_linear=raw_linear
+    
+    def forward(self,x):    # x:(batch_size,in_features)
+        raw_output=self.raw_linear(x)   
+        lora_output=x@((self.lora_a@self.lora_b)*self.alpha/self.r)    # matmul(x,matmul(lora_a,lora_b)*alpha/r)
+        return raw_output+lora_output
+
+def inject_lora(model,name,layer):
+    name_cols=name.split('.')
+
+    # 逐层下探到linear归属的module
+    children=name_cols[:-1]
+    cur_layer=model 
+    for child in children:
+        cur_layer=getattr(cur_layer,child)
+    
+    #print(layer==getattr(cur_layer,name_cols[-1]))
+    lora_layer=LoraLayer(layer,layer.in_features,layer.out_features,24,1)
+    setattr(cur_layer,name_cols[-1],lora_layer)
 
 # 保存text encoder中新增token的embedding
 
@@ -168,29 +198,42 @@ def train(config):
 
 
     nnet, optimizer = accelerator.prepare(train_state.nnet, train_state.optimizer)
+
+    # 向nn.Linear层注入Lora
+    for name,layer in nnet.named_modules():
+ #       name_cols=name.split('.')
+    # 过滤出attention使用的linear权重
+ #       filter_names=['qkv']
+        if 'qkv' in name :
+  #      if any(n in name_cols for n in filter_names) and isinstance(layer,nn.Linear):
+            inject_lora(nnet,name,layer)
+    
+    # lora权重的加载
+    try:
+        restore_lora_state=torch.load('lora.pt')
+        nnet.load_state_dict(restore_lora_state,strict=False)
+    except:
+        pass 
     nnet.to(device)
     
-    # # 全参微调不加lora
+    # 全参微调不加lora
     # for name,param in nnet.named_parameters():
     #     param.requires_grad=True
-    # for name,param in nnet.named_parameters():
-    #      if 'lora_adapters_ttoi' in name or 'lora_adapters_itot'  in name:
-    #         param.requires_grad = False  
-    
-    
-    # 非Lora部分不计算梯度
+    # 冻结非Lora参数
     for name,param in nnet.named_parameters():
-        if 'lora_attention' in name or 'token_embedding' in name:
-            param.requires_grad = True
-        else:
+        if name.split('.')[-1] not in ['lora_a','lora_b']:  # 非LOra部分不计算梯度
             param.requires_grad=False
+        else:
+            param.requires_grad=True
+    
+    
 
             
     # check the nnet's parameters if they are frozen
     for name, param in nnet.named_parameters():
         print(f'{name}: requires_grad={param.requires_grad}') 
         
-    exit()
+        
     lr_scheduler = train_state.lr_scheduler
 
     autoencoder = libs.autoencoder.get_model(**config.autoencoder).to(device)
@@ -307,26 +350,7 @@ def train(config):
     _betas = stable_diffusion_beta_schedule()
     schedule = Schedule(_betas)
     logging.info(f'use {schedule}')
-    # for name, param in nnet.named_parameters():
-    #         param.requires_grad = True
-    # for name, param in nnet.named_parameters():
-    #     if 'lora_adapters_itot' not in name and 'lora_adapters_ttoi' not in name:
-    #         param.requires_grad = False
-    # for name, param in nnet.named_parameters():
-    #     if 'text_embed' in name or 'token_embedding' in name:
-    #         param.requires_grad = True
-    
-    # # 验证哪些参数被冻结
-    # for name, param in text_encoder.named_parameters():
-    #     if  param.requires_grad:
-    #         print(f"未冻结的参数: {name}")
 
-    # total_frozen_params = sum(p.numel() for p in text_encoder.parameters() if  p.requires_grad)
- 
-    # 77560320 lora_adapter+text_embedding  37946112 token_embedding
-    # INFO - nnet has 1029970000 parameters
-    # INFO - text_encoder has 123060480 parameters
-    # text_encoder = accelerator.prepare(text_encoder)
     def train_step():
         metrics = dict()
         
@@ -347,24 +371,13 @@ def train(config):
         # bloss.requires_grad = True
         
         accelerator.backward(bloss)
-        # for name, param in nnet.named_parameters():
-        #     if param.grad is  None:
-        #         print(name)
 
-        # for name, param in text_encoder.named_parameters():
-        #     if param.grad is not None:
-        #         print(name)
-        # 如果参数的梯度不为None，说明存在梯度
             
                
         # Zero out the gradients for all token embeddings except the newly added
         # embeddings for the concept, as we only want to optimize the concept embeddings
         if True:
-            # 谁给删了，而且改回来了，下面这个 if 语句没什么大用，都是一样的效果
-            # if accelerator.num_processes > 1:
-            #     grads_text_encoder = text_encoder.get_input_embeddings().weight.grad
-            # else:
-            #     grads_text_encoder = text_encoder.get_input_embeddings().weight.grad
+         
             grads_text_encoder = text_encoder.get_input_embeddings().weight.grad
             # Get the index for tokens that we want to zero the grads for
             index_grads_to_zero = torch.arange(len(tokenizer)) != modifier_token_id[0]
@@ -402,21 +415,13 @@ def train(config):
        
         return metrics
 
-    # @torch.no_grad()
-    # @torch.autocast(device_type='cuda')
-    # def eval(total_step):
-    #     """
-    #     write evaluation code here
-    #     """
 
-    #     return
 
     def loop():
         log_step = config.log_interval 
-        # log_step = 0
-        # eval_step = 1000000
+      
         save_step = config.save_interval # 100
-        # save_step = 0
+
         count = 0
         while True:
             nnet.train()
@@ -437,19 +442,21 @@ def train(config):
                     # train_state.save(os.path.join(config.log_dir, f'{total_step:04}.ckpt'))
                     log_step += config.log_interval
 
-                # if total_step >= eval_step:
-                #     eval(total_step)
-                #     eval_step += config.eval_interval
-
-                # if total_step >= config.save_interval :#save_step = 300
-                #     logging.info(f'Save and eval checkpoint {total_step}...')
-                #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
-                #     save_step += config.save_interval
-                   
-                if total_step >= 1000:
+                if total_step >= 800:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                     train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    
+                    
+                    ## save lora weights 
+                    lora_state={}
+                    for name,param in model.named_parameters():
+                        name_cols=name.split('.')
+                        filter_names=['lora_a','lora_b']
+                        if any(n==name_cols[-1] for n in filter_names):
+                           lora_state[name]=param
+                    torch.save(lora_state,'lora.pt.tmp')
+                    os.replace('lora.pt.tmp','lora.pt')
                     break
 
             
@@ -611,7 +618,7 @@ if __name__ == "__main__":
 
 
 """ 
-accelerate launch train.py \
+accelerate launch traincopy.py \
   --instance_data_dir="/home/schengwei/competition/train_data/oldgirl2" \
   --outdir="/home/schengwei/competition/model_output/girl2"\
   --class_data_dir "/home/schengwei/competition/real_reg/samples_girlbody" \

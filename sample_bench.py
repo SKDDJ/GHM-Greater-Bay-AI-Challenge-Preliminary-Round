@@ -332,7 +332,6 @@ def assert_same(path1, path2):
             return False
     return True
 
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--nnet_path", type=str, default="models/uvit_v1.pth", help="nnet path to resume")
@@ -357,7 +356,14 @@ def main(argv=None):
     # init models
     nnet = UViT(**config.nnet)
     Lora = True
-    nnet.delete_lora(Lora)
+    # for module in nnet.in_blocks:
+    #     module.add_lora(Lora)
+    
+    # nnet.mid_block.add_lora(Lora)
+
+    # for module in nnet.out_blocks:
+    #     module.add_lora(Lora)
+    nnet.add_lora(Lora)
     print(config.nnet_path)
     print(f'load nnet from {config.nnet_path}')
     nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'), False)

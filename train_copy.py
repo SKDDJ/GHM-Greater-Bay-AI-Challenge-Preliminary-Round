@@ -44,13 +44,12 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from pathlib import Path
-from transformers import CLIPTextModel
+
 import tqdm
 
 from accelerate.logging import get_logger 
 import itertools
 import json
-#from pathos.multiprocessing import ProcessingPool as Pool
 
 
 
@@ -155,9 +154,6 @@ def train(config):
     text_encoder = text_encoder_cls.from_pretrained(
         pretrained_model_name_or_path, subfolder="text_encoder", revision=config.revision
     )
-    # text_encoder = CLIPTextModel.from_pretrained(
-    #     pretrained_model_name_or_path, subfolder="text_encoder", revision=config.revision
-    # )
     text_encoder.to(device)
     train_state = utils.initialize_train_state(config, device, uvit_class=UViT,text_encoder = text_encoder)
     logging.info(f'load nnet from {config.nnet_path}')
@@ -165,51 +161,26 @@ def train(config):
 
 
     caption_decoder = CaptionDecoder(device=device, **config.caption_decoder)
-
-
+    
     nnet, optimizer = accelerator.prepare(train_state.nnet, train_state.optimizer)
     nnet.to(device)
     
-    # # 全参微调不加lora
-    # for name,param in nnet.named_parameters():
-    #     param.requires_grad=True
-    # for name,param in nnet.named_parameters():
-    #      if 'lora_adapters_ttoi' in name or 'lora_adapters_itot'  in name:
-    #         param.requires_grad = False  
-    
-    
-    # 非Lora部分不计算梯度
     for name,param in nnet.named_parameters():
-        if 'lora_attention' in name or 'token_embedding' in name:
-            param.requires_grad = True
-        else:
+        if name.split('.')[-1] not in ['lora_adapters_ttoi'] or ['lora_adapters_itot'] :  # 非Lora部分不计算梯度
             param.requires_grad=False
-
-            
-    # check the nnet's parameters if they are frozen
-    for name, param in nnet.named_parameters():
-        print(f'{name}: requires_grad={param.requires_grad}') 
-        
-    exit()
+        else:
+            param.requires_grad=True
     lr_scheduler = train_state.lr_scheduler
 
     autoencoder = libs.autoencoder.get_model(**config.autoencoder).to(device)
-    
-    autoencoder.requires_grad = False
-    
-    # check the nnet's parameters if they are frozen
-    for name, param in nnet.named_parameters():
-        print(f'{name}: requires_grad={param.requires_grad}')
-
     
     # Modify the code of custom diffusion to directly import the clip text encoder 
     # instead of freezing all parameters.
     # clip_text_model = CLIPEmbedder(version=config.clip_text_model, device=device)
 
-
+    # clip_text_model = CLIPEmbedder(version=config.clip_text_model, device=device)
     clip_img_model, clip_img_model_preprocess = clip.load(config.clip_img_model, jit=False)
-    # clip_img_model.to(device).eval().requires_grad_(False)
-    clip_img_model.to(device).requires_grad_(False)
+    clip_img_model.to(device).eval().requires_grad_(False)
     
     # Adding a modifier token which is optimized #### 来自Textual inversion代码
     # Code taken from https://github.com/huggingface/diffusers/blob/main/examples/textual_inversion/textual_inversion.py
@@ -347,16 +318,7 @@ def train(config):
         # bloss.requires_grad = True
         
         accelerator.backward(bloss)
-        # for name, param in nnet.named_parameters():
-        #     if param.grad is  None:
-        #         print(name)
-
-        # for name, param in text_encoder.named_parameters():
-        #     if param.grad is not None:
-        #         print(name)
-        # 如果参数的梯度不为None，说明存在梯度
-            
-               
+    
         # Zero out the gradients for all token embeddings except the newly added
         # embeddings for the concept, as we only want to optimize the concept embeddings
         if True:
@@ -399,7 +361,6 @@ def train(config):
         # metrics['loss_clip_img'] = accelerator.gather(loss_clip_img.detach().mean()).mean().item()
         # metrics['scale'] = accelerator.scaler.get_scale()
         metrics['lr'] = train_state.optimizer.param_groups[0]['lr']
-       
         return metrics
 
     # @torch.no_grad()
@@ -412,19 +373,15 @@ def train(config):
     #     return
 
     def loop():
-        log_step = config.log_interval 
-        # log_step = 0
+        log_step = 0
         # eval_step = 1000000
-        save_step = config.save_interval # 100
-        # save_step = 0
-        count = 0
+        save_step = config.save_interval
+        
         while True:
             nnet.train()
             with accelerator.accumulate(nnet),accelerator.accumulate(text_encoder):
                 metrics = train_step()
             print("metrics",metrics)
-            count+=1
-            print(count)
             accelerator.wait_for_everyone()
             
             if accelerator.is_main_process:
@@ -434,19 +391,18 @@ def train(config):
                 if total_step >= log_step:
                     logging.info(utils.dct2str(dict(step=total_step, **metrics)))
                #     wandb.log(utils.add_prefix(metrics, 'train'), step=total_step)
-                    # train_state.save(os.path.join(config.log_dir, f'{total_step:04}.ckpt'))
                     log_step += config.log_interval
 
                 # if total_step >= eval_step:
                 #     eval(total_step)
                 #     eval_step += config.eval_interval
 
-                # if total_step >= config.save_interval :#save_step = 300
+                # if total_step >= 1000 :#save_step = 300
                 #     logging.info(f'Save and eval checkpoint {total_step}...')
                 #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                 #     save_step += config.save_interval
                    
-                if total_step >= 1000:
+                if total_step  >= save_step:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                     train_state.save(os.path.join(config.outdir, 'final.ckpt'))
@@ -508,15 +464,15 @@ def get_args():
         ),
     )
 
-    # parser.add_argument(
-    #     "--logging_dir",
-    #     type=str,
-    #     default="logs",
-    #     help=(
-    #         "[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to"
-    #         " *outdir/runs/**CURRENT_DATETIME_HOSTNAME***."
-    #     ),
-    # )
+    parser.add_argument(
+        "--logging_dir",
+        type=str,
+        default="logs",
+        help=(
+            "[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to"
+            " *outdir/runs/**CURRENT_DATETIME_HOSTNAME***."
+        ),
+    )
     parser.add_argument(
         "--instance_data_dir",
         type=str,
@@ -611,10 +567,10 @@ if __name__ == "__main__":
 
 
 """ 
-accelerate launch train.py \
-  --instance_data_dir="/home/schengwei/competition/train_data/oldgirl2" \
+accelerate launch train_copy.py \
+  --instance_data_dir="/home/schengwei/competition/train_data/girl2" \
   --outdir="/home/schengwei/competition/model_output/girl2"\
-  --class_data_dir "/home/schengwei/competition/real_reg/samples_girlbody" \
+  --class_data_dir "/home/schengwei/competition/real_reg/samples_girlhead" \
   --with_prior_preservation  --prior_loss_weight=1.0 \
   --class_prompt="girl" --num_class_images=200 \
   --instance_prompt="photo of a <new1> girl"  \
