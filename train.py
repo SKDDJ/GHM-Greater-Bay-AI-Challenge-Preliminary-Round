@@ -476,7 +476,7 @@ def train(config):
                 #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                 #     save_step += config.save_interval
                    
-                if total_step >= 300:
+                if total_step >= 100:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                     train_state.save(os.path.join(config.outdir, 'final.ckpt'))

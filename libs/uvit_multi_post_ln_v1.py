@@ -19,9 +19,9 @@ class LoRALinearLayer(nn.Module):
         self.rank = rank
 
         nn.init.normal_(self.down.weight, std=1 / rank)
-        # nn.init.ones_(self.up.weight)
-        nn.init.zeros_(self.up.weight)
-        self.up.weight.data.fill_(0.0001)
+        nn.init.ones_(self.up.weight)
+        # nn.init.zeros_(self.up.weight)
+        # self.up.weight.data.fill_(0.0001)
 
     def forward(self, hidden_states):
         orig_dtype = hidden_states.dtype
