@@ -53,11 +53,12 @@ import json
 #from pathos.multiprocessing import ProcessingPool as Pool
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
 lora_config = LoraConfig(
+    inference_mode=False,
     lora_alpha=16,
     lora_dropout=0.1,
     r=24,
     bias="none",
-    target_modules=["qkv","proj"],
+    # target_modules=["qkv","proj"],
 )
 
 
@@ -158,7 +159,8 @@ def train(config):
                 concepts_list[i] = concept
                 accelerator.wait_for_everyone()
             
-    pretrained_model_name_or_path = "/home/wuyujia/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/133a221b8aa7292a167afc5127cb63fb5005638b"
+    # pretrained_model_name_or_path = "/home/wuyujia/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/133a221b8aa7292a167afc5127cb63fb5005638b"
+    pretrained_model_name_or_path = "huggingface"
     tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path,
             subfolder="tokenizer",
@@ -174,9 +176,7 @@ def train(config):
     # )
     text_encoder.to(device)
     train_state = utils.initialize_train_state(config, device, uvit_class=UViT,text_encoder = text_encoder)
-    logging.info(f'load nnet from {config.nnet_path}')
-    
-    train_state.nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'), False)
+
 
  
     caption_decoder = CaptionDecoder(device=device, **config.caption_decoder)
@@ -202,12 +202,13 @@ def train(config):
     #         param.requires_grad = False  
     
     
-    # 非Lora部分不计算梯度
-    for name,param in nnet.named_parameters():
-        if 'lora_attention' in name or 'token_embedding' in name:
-            param.requires_grad = True
-        else:
-            param.requires_grad=False
+
+    # # 非Lora部分不计算梯度
+    # for name,param in nnet.named_parameters():
+    #     if 'lora_attention' in name or 'token_embedding' in name:
+    #         param.requires_grad = True
+    #     else:
+    #         param.requires_grad=False
 
     # for name,param in nnet.named_parameters():
     #     if 'lora' in name or 'token_embedding' in name:
@@ -353,6 +354,7 @@ def train(config):
         if  param.requires_grad:
             print(f"未冻结的参数: {name}")
 
+
     # total_frozen_params = sum(p.numel() for p in text_encoder.parameters() if  p.requires_grad)
  
     # 77560320 lora_adapter+text_embedding  37946112 token_embedding
@@ -380,8 +382,10 @@ def train(config):
         
         accelerator.backward(bloss)
         for name, param in nnet.named_parameters():
-            if param.grad is not None or 0:
+            if param.grad is not None:
                 print(name)
+    
+        
 
         # for name, param in text_encoder.named_parameters():
         #     if param.grad is not None:
@@ -421,7 +425,7 @@ def train(config):
         #  更新参数
         optimizer.step()
         lr_scheduler.step()
-        train_state.ema_update(config.get('ema_rate', 0.9999))
+        # train_state.ema_update(config.get('ema_rate', 0.9999))这个参数影响添加peft训练
         train_state.step += 1
         
         optimizer.zero_grad()
@@ -455,7 +459,7 @@ def train(config):
                 metrics = train_step()
             print("metrics",metrics)
             count+=1
-            print(count)
+         
             accelerator.wait_for_everyone()
             
             if accelerator.is_main_process:
@@ -476,7 +480,7 @@ def train(config):
                 #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                 #     save_step += config.save_interval
                    
-                if total_step >= 100:
+                if total_step >= 600:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                     train_state.save(os.path.join(config.outdir, 'final.ckpt'))
@@ -642,9 +646,9 @@ if __name__ == "__main__":
 
 """ 
 accelerate launch train.py \
-  --instance_data_dir="/home/wuyujia/competition/train_data/newboy1" \
-  --outdir="/home/wuyujia/competition/model_output/boy11"\
-  --class_data_dir="/home/wuyujia/competition/real_reg/samples_boyface" \
+  --instance_data_dir="train_data/newboy1" \
+  --outdir="model_output/boy11"\
+  --class_data_dir="real_reg/samples_boyface" \
   --with_prior_preservation  --prior_loss_weight=1.0 \
   --class_prompt="boy" --num_class_images=200 \
   --instance_prompt=" a <new1> boy"  \

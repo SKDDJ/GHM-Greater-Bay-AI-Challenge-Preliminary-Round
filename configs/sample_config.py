@@ -30,7 +30,8 @@ def get_config():
     config.resolution = 512
     
     config.clip_img_model = "ViT-B/32"
-    config.clip_text_model = "/home/wuyujia/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
+    # config.clip_text_model = "/home/wuyujia/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
+    config.clip_text_model = "huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
     
     config.only_load_model = True
     
@@ -80,11 +81,11 @@ def get_config():
 
     # sample
     config.mode = "t2i"
-    config.n_samples = 9 # control the numbers of generating images 
+    config.n_samples = 6 # control the numbers of generating images 
     config.n_iter = 1 # 过多的迭代次数可能导致过拟合或生成的样本过于接近训练数据
     config.sample = d(
-        sample_steps=150,
-        scale=7., # scale of the text embedding 1就挺好， 0.1 不像
+        sample_steps=100,
+        scale=7.5, # scale of the text embedding 7 - 10
         t2i_cfg_mode='true_uncond', # 'empty_token' or 'true_uncond'
     )
 

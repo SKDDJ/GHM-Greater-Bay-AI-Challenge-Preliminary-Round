@@ -57,7 +57,7 @@ def get_config():
     config.optimizer = d(
         name='adamw',
         lr=2e-05, # for custom diffusion, lr=5e-6, but in code is will double if with preservation is True.
-        weight_decay=0.03, # 0.03
+        weight_decay=0.01, # 0.03
         betas=(0.9, 0.999),# adam_beta2 changed from 0.9 to 0.999, same as Custom Diffusion.
         amsgrad=False,
         eps=1e-8, # adam_eps added 
@@ -65,7 +65,7 @@ def get_config():
 
     config.lr_scheduler = d(
         name='customized',
-        warmup_steps=500
+        warmup_steps=5
     )
 
     config.autoencoder = d(

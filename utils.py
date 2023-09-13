@@ -10,6 +10,12 @@ from PIL import Image, ImageDraw, ImageFont
 from libs.clip import FrozenCLIPEmbedder
 import itertools
 from libs.clip import CLIPEmbedder
+from peft import inject_adapter_in_model, LoraConfig,get_peft_model
+lora_config = LoraConfig(
+   r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+#    target_modules=["qkv","fc1","fc2","proj"]
+)
+
 def get_config_name():
     argv = sys.argv
     for i in range(1, len(argv)):
@@ -169,35 +175,42 @@ def cnt_params(model):
 def initialize_train_state(config, device, uvit_class,text_encoder = None):
     
     nnet = uvit_class(**config.nnet)
-    param_lists = [
-    text_encoder.get_input_embeddings().parameters(),
-    nnet.mid_block.attn.parameters(),
-    nnet.token_embedding.parameters(),
-    # nnet.lora_adapters_ttoi.parameters(),
-    # nnet.lora_adapters_itot.parameters(),
-    ]
-    for i in range(15):
-        param_lists.append(nnet.in_blocks[i].attn.parameters())
-        param_lists.append(nnet.out_blocks[i].attn.parameters())    
-    for i in range(15):
-        param_lists.append(nnet.in_blocks[i].lora_attention.parameters())
-        param_lists.append(nnet.out_blocks[i].lora_attention.parameters())
+    logging.info(f'load nnet from {config.nnet_path}')
+
+    nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),False)
+    nnet = get_peft_model(nnet,lora_config)
+    # nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),True)
+  
+    nnet.print_trainable_parameters()
+    
+
+    input_embed_params = list(text_encoder.get_input_embeddings().parameters())
+    param_lists = input_embed_params + [param for name, param in nnet.named_parameters() if 'lora' in name]
+    
+    # for i in range(15):
+    #     param_lists.append(nnet.in_blocks[i].attn.parameters())
+    #     param_lists.append(nnet.out_blocks[i].attn.parameters())    
+    # for i in range(15):
+    #     param_lists.append(nnet.in_blocks[i].lora_attention.parameters())
+    #     param_lists.append(nnet.out_blocks[i].lora_attention.parameters())
     # param_lists = [
     #     text_encoder.get_input_embeddings().parameters(),
     #     nnet.parameters()]
-    params = list(itertools.chain(*param_lists))
+
     nnet_ema = uvit_class(**config.nnet)
     nnet_ema.eval()
+    # param_lists = list(itertools.chain(*param_lists))
+    
     # logging.info(f'nnet has {cnt_params(nnet)} parameters')
     # logging.info(f'text_encoder has {cnt_params(text_encoder)} parameters')
   
-    optimizer = get_optimizer(params, **config.optimizer)
+    optimizer = get_optimizer(param_lists, **config.optimizer)
   
     lr_scheduler = get_lr_scheduler(optimizer, **config.lr_scheduler)
 
     train_state = TrainState(optimizer=optimizer, lr_scheduler=lr_scheduler, step=0,
                              nnet=nnet, nnet_ema=nnet_ema, text_embedding=text_encoder.get_input_embeddings())
-    train_state.ema_update(0)
+    # train_state.ema_update(0)
     train_state.to(device)
     # no need to resume
     # train_state.resume(config.resume_ckpt_path, only_load_model=config.only_load_model)

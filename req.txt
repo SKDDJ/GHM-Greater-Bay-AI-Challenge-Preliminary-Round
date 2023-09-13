@@ -1,25 +1,3 @@
-accelerate==0.20.3
-absl-py==1.4.0
-transformers==4.26.0
-einops==0.6.1
-wandb==0.15.5
-ml_collections==0.1.1
-xformers==0.0.16
-triton==2.0.0
-
-insightface==0.7.3
-mxnet==1.9.1
-numpy==1.23.0
-onnxruntime==1.15.1
-onnxruntime-gpu==1.15.1
-torch==1.13.1
-ftfy==6.1.1
-regex==2023.6.3
-tqdm==4.65.0
-# git+https://github.com/openai/CLIP.git
-
-
-
 absl-py==1.4.0
 accelerate==0.20.3
 albumentations==1.3.1
@@ -113,5 +91,3 @@ wcwidth==0.2.6
 wheel==0.38.4
 xformers==0.0.16
 zipp==3.16.2
-./CLIP
-
