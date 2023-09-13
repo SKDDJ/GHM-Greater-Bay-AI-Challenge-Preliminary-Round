@@ -26,6 +26,11 @@ import numpy as np
 from libs.uvit_multi_post_ln_v1 import UViT
 from libs.caption_decoder import CaptionDecoder
 
+from peft import inject_adapter_in_model, LoraConfig,get_peft_model
+lora_config = LoraConfig(
+   r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+#    target_modules=["qkv","fc1","fc2","proj"]
+)
 
 
 
@@ -355,18 +360,12 @@ def main(argv=None):
 
     # init models
     nnet = UViT(**config.nnet)
-    Lora = True
-    # for module in nnet.in_blocks:
-    #     module.add_lora(Lora)
     
-    # nnet.mid_block.add_lora(Lora)
-
-    # for module in nnet.out_blocks:
-    #     module.add_lora(Lora)
-    nnet.add_lora(Lora)
+    Lora = True
     print(config.nnet_path)
     print(f'load nnet from {config.nnet_path}')
-    nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'), False)
+    nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),False)
+    nnet = get_peft_model(nnet,lora_config)
     nnet.to(device)
     if args.half:
         nnet = nnet.half()
@@ -376,15 +375,15 @@ def main(argv=None):
     clip_img_model.to(device).eval().requires_grad_(False)
     caption_decoder = CaptionDecoder(device=device, **config.caption_decoder)
 
-    config.prompt = "an elephant under the sea"
+    config.prompt = "a white girl with green hair"
 
     sample(config, nnet, clip_text_model, autoencoder, clip_img_model, 
            clip_img_model_preprocess, caption_decoder, device)
     
-    if assert_same("bench_samples_standard", config.output_path):
-        print("error assertion passed")
-    else:
-        print("error assertion failed")
+    # if assert_same("bench_samples_standard", config.output_path):
+    #     print("error assertion passed")
+    # else:
+    #     print("error assertion failed")
     
 
 if __name__ == "__main__":

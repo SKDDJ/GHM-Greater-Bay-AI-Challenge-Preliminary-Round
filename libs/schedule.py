@@ -107,7 +107,7 @@ def LSimple_T2I(img, clip_img, text, data_type, nnet, schedule, device, config, 
     loss_img_clip =  F.mse_loss(clip_img_out.float(), clip_img_eps.float(), reduction="mean")
     text_out = torch.nn.functional.softplus(text_out).mean()
     # lora_img_out = torch.nn.functional.softplus(lora_img_out).mean()
-    bloss =  aloss+   1.5 * prior_loss + 0.7 * loss_img_clip + 0. * text_out #+ 0. *lora_img_out
+    bloss =  1.2*aloss+  prior_loss +  loss_img_clip + 0. * text_out #+ 0. *lora_img_out
   
     return  bloss
 

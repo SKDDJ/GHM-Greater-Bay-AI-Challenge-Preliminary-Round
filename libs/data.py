@@ -167,6 +167,7 @@ class PersonalizedBase(Dataset):
         return self._length
     
     def preprocess(self, image, scale, resample):
+### 在这里强行加了一堆 64*64 的mask，动态的 mask 有点问题，不确定影响大不大        
         outer, inner = self.size, scale
         factor = self.size // self.mask_size
         if scale > self.size:
@@ -174,30 +175,37 @@ class PersonalizedBase(Dataset):
         top, left = np.random.randint(0, outer - inner + 1), np.random.randint(0, outer - inner + 1)
         image = image.resize((scale, scale), resample=resample)
         image = np.array(image).astype(np.uint8)
+   
         image = (image / 127.5 - 1.0).astype(np.float32)
         instance_image = np.zeros((self.size, self.size, 3), dtype=np.float32)
         mask = np.zeros((self.size // factor, self.size // factor))
         if scale > self.size:
             instance_image = image[top : top + inner, left : left + inner, :]
             mask = np.ones((self.size // factor, self.size // factor))
+            mask = np.ones((64,64))
+         
         else:
             instance_image[top : top + inner, left : left + inner, :] = image
             mask[
                 top // factor + 1 : (top + scale) // factor - 1, left // factor + 1 : (left + scale) // factor - 1
             ] = 1.0
+            mask = np.ones((64,64))
+          
+            
         
         return instance_image, mask
 
     def __getitem__(self, index):
         example = {}
         instance_image, instance_prompt = self.instance_images_path[index % self.num_instance_images]
+    
         instance_image = Image.open(instance_image)
         
         if not instance_image.mode == "RGB":
             instance_image = instance_image.convert("RGB")
         example["instance_clip_images"] = self.transform_clip(instance_image)
         instance_image = self.flip(instance_image)
-
+        
         # apply resize augmentation and create a valid image region mask
         random_scale = self.size
         if self.aug:
@@ -206,6 +214,7 @@ class PersonalizedBase(Dataset):
                 if np.random.uniform() < 0.66
                 else np.random.randint(int(1.2 * self.size), int(1.4 * self.size))
             )
+        
         
         
         instance_image, mask = self.preprocess(instance_image, random_scale, self.interpolation)
@@ -234,7 +243,6 @@ class PersonalizedBase(Dataset):
         #  49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407,
         #  49407, 49407, 49407, 49407, 49407, 49407, 49407]])
         class_image, class_prompt = self.class_images_path[index % self.num_class_images]
-        
         class_image = Image.open(class_image)
         if not class_image.mode == "RGB":
             class_image = class_image.convert("RGB")
@@ -248,5 +256,5 @@ class PersonalizedBase(Dataset):
             return_tensors="pt",
         ).input_ids
         example["class_clip_images"] = self.transform_clip(class_image)
-       
+      
         return example

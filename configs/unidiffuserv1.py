@@ -65,7 +65,7 @@ def get_config():
 
     config.lr_scheduler = d(
         name='customized',
-        warmup_steps=500
+        warmup_steps=500 ## 这个 warmup 的步数究竟多少比较合适？
     )
 
     config.autoencoder = d(

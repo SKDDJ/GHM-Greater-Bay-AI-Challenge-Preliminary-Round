@@ -5,10 +5,10 @@ from .timm import trunc_normal_, DropPath, Mlp
 import einops
 import torch.utils.checkpoint
 import torch.nn.functional as F
+
 class LoRALinearLayer(nn.Module):
-    def __init__(self, in_features, out_features, rank=24, network_alpha=None, device='cuda:0', dtype=None):
+    def __init__(self, in_features, out_features, rank=128, network_alpha=84, device='cuda:0', dtype=None):
         super().__init__()
-        
         
         if rank > min(in_features, out_features):
             raise ValueError(f"LoRA rank {rank} must be less or equal than {min(in_features, out_features)}")
@@ -19,12 +19,17 @@ class LoRALinearLayer(nn.Module):
         self.rank = rank
 
         nn.init.normal_(self.down.weight, std=1 / rank)
+        
+        ### 当时在这里修改的 lora 初始化是 0 还是 1 等
+        
+        # nn.init.ones_(self.up.weight)
         nn.init.zeros_(self.up.weight)
+        # self.up.weight.data.fill_(0.0001)
 
     def forward(self, hidden_states):
         orig_dtype = hidden_states.dtype
         dtype = self.down.weight.dtype
-
+    
         down_hidden_states = self.down(hidden_states.to(dtype))
         up_hidden_states = self.up(down_hidden_states)
 
@@ -43,13 +48,16 @@ class lora_cross_attention_ttoi(nn.Module):
         self.img_dim = img_dim
         self.text_dim = text_dim
         self.rank = rank
-        self.to_q_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.to_k_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.to_v_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
+        self.to_q = nn.Linear(hidden_size, hidden_size)
+        self.to_k = nn.Linear(hidden_size, hidden_size)
+        self.to_v = nn.Linear(hidden_size, hidden_size)
         self.attn_drop = nn.Dropout(attn_drop)
-        self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
+        self.to_out = nn.Linear(hidden_size, hidden_size)
         self.proj_drop = nn.Dropout(proj_drop)
-    
+        nn.init.zeros_(self.to_q.weight)
+        nn.init.zeros_(self.to_k.weight)
+        nn.init.zeros_(self.to_v.weight)
+        nn.init.zeros_(self.to_out.weight)
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
         batch_size, seq_len, dim = tensor.shape
@@ -132,9 +140,9 @@ class lora_cross_attention_ttoi(nn.Module):
         #添加mask
         attention_mask = self.prepare_attention_mask(attention_mask, 1024, batch_size)
         
-        query = self.to_q_lora(img)#得到query架构仍然为1024*1536
-        key = self.to_k_lora(text)
-        value =self.to_v_lora(text)#仍为77*1536
+        query = self.to_q(img)#得到query架构仍然为1024*1536
+        key = self.to_k(text)
+        value =self.to_v(text)#仍为77*1536
         # key = key.to(attn.to_q.weight.dtype)
         # value = value.to(attn.to_q.weight.dtype)
 
@@ -154,7 +162,7 @@ class lora_cross_attention_ttoi(nn.Module):
         hidden_states = self.batch_to_head_dim(hidden_states)
     
         # linear proj
-        hidden_states = self.to_out_lora(hidden_states)
+        hidden_states = self.to_out(hidden_states)
         
         # dropout
         hidden_states = self.proj_drop(hidden_states)
@@ -171,13 +179,16 @@ class lora_cross_attention_itot(nn.Module):
         self.img_dim = img_dim
         self.text_dim = text_dim
         self.rank = rank
-        self.to_q_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.to_k_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
-        self.to_v_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
+        self.to_q = nn.Linear(hidden_size, hidden_size)
+        self.to_k = nn.Linear(hidden_size, hidden_size)
+        self.to_v = nn.Linear(hidden_size, hidden_size)
         self.attn_drop = nn.Dropout(attn_drop)
-        self.to_out_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
+        self.to_out = nn.Linear(hidden_size, hidden_size)
         self.proj_drop = nn.Dropout(proj_drop)
-    
+        nn.init.zeros_(self.to_q.weight)
+        nn.init.zeros_(self.to_k.weight)
+        nn.init.zeros_(self.to_v.weight)
+        nn.init.zeros_(self.to_out.weight)
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
         batch_size, seq_len, dim = tensor.shape
@@ -260,9 +271,9 @@ class lora_cross_attention_itot(nn.Module):
         #添加mask
         attention_mask = self.prepare_attention_mask(attention_mask, 1024, batch_size)
         
-        query = self.to_q_lora(text)#得到query架构仍然为77*1536
-        key = self.to_k_lora(img)
-        value =self.to_v_lora(img)#仍为77*1536
+        query = self.to_q(text)#得到query架构仍然为77*1536
+        key = self.to_k(img)
+        value =self.to_v(img)#仍为77*1536
         # key = key.to(attn.to_q.weight.dtype)
         # value = value.to(attn.to_q.weight.dtype)
 
@@ -282,7 +293,7 @@ class lora_cross_attention_itot(nn.Module):
         hidden_states = self.batch_to_head_dim(hidden_states)
     
         # linear proj
-        hidden_states = self.to_out_lora(hidden_states)
+        hidden_states = self.to_out(hidden_states)
         
         # dropout
         hidden_states = self.proj_drop(hidden_states)
@@ -361,6 +372,7 @@ class Attention(nn.Module):
         B, L, C = x.shape
 
         qkv = self.qkv(x)
+       
         if ATTENTION_MODE == 'flash':
             qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
             q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
@@ -392,29 +404,31 @@ class LoraAttention(nn.Module):
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
-        self.to_q_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
-        self.to_k_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
-        self.to_v_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.to_qkv_lora = LoRALinearLayer(dim , dim*3 ,rank ,network_alpha)
         # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
-        self.to_out_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.to_out = LoRALinearLayer(dim, dim, rank, network_alpha)
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x):
         B, L, C = x.shape
-        q = self.to_q_lora(x)
-        k = self.to_k_lora(x)
-        v = self.to_v_lora(x)
-        # qkv = self.qkv(x)
+        qkv = self.to_qkv_lora(x)
+        
+        
         if ATTENTION_MODE == 'flash':
             qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
             q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
             x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
             x = einops.rearrange(x, 'B H L D -> B L (H D)')
         elif ATTENTION_MODE == 'xformers':
-            q = einops.rearrange(q, 'B L (H D) -> B L H D', H=self.num_heads)
-            k = einops.rearrange(k, 'B L (H D) -> B L H D', H=self.num_heads)
-            v = einops.rearrange(v, 'B L (H D) -> B L H D', H=self.num_heads)
+            
+            # 原始注释写的写法和这个差不多捏，只是不是单独进行处理了捏
+            
+            # q = einops.rearrange(q, 'B L (H D) -> B L H D', H=self.num_heads)
+            # k = einops.rearrange(k, 'B L (H D) -> B L H D', H=self.num_heads)
+            # v = einops.rearrange(v, 'B L (H D) -> B L H D', H=self.num_heads)
+            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B L H D', K=3, H=self.num_heads)
+            q, k, v = qkv[0], qkv[1], qkv[2]  # B L H D
             x = xformers.ops.memory_efficient_attention(q, k, v)
             x = einops.rearrange(x, 'B L H D -> B L (H D)', H=self.num_heads)
         elif ATTENTION_MODE == 'math':
@@ -428,7 +442,7 @@ class LoraAttention(nn.Module):
         else:
             raise NotImplemented
 
-        x = self.to_out_lora(x)
+        x = self.to_out(x)
         x = self.proj_drop(x)
         return x
     
@@ -441,7 +455,7 @@ class Block(nn.Module):
         super().__init__()
         self.norm1 = norm_layer(dim) if skip else None
         self.norm2 = norm_layer(dim)
-        self.lora_attention = LoraAttention(dim, num_heads=num_heads,qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+        # self.lora_attention = LoraAttention(dim, num_heads=num_heads,qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -460,23 +474,22 @@ class Block(nn.Module):
             return self._forward(x, skip, lora_input_img, lora_input_text)
 
     def _forward(self, x, skip, lora_input_img, lora_input_text):
-        if not hasattr (self,'lora_attn'):
+        if  hasattr (self,'lora_attn'):
             if self.skip_linear is not None:
                 x = self.skip_linear(torch.cat([x, skip], dim=-1))
                 x = self.norm1(x)
-            # if lora_input_text is not None and lora_input_img is not None:      
-            #     x = x + self.drop_path(self.attn(x))
-            #     t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, 77, 1, 1024), dim=1)
-            #     #text= text + lora_input_text
-            #     img= img + lora_input_img
-            #     x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)
-            #     x = self.norm2(x)
-            # else:
-                # print("lora_attention",self.lora_attention.to_q_lora.up.weight)
-                # exit()
-            x_attention = self.lora_attention(x)
-            x = x + self.drop_path(self.attn(x))+ x_attention
-            x = self.norm2(x)
+            if lora_input_text is not None and lora_input_img is not None: 
+                x_attention = self.lora_attention(x) 
+                x = x + self.drop_path(self.attn(x)) + x_attention 
+                t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, 77, 1, 1024), dim=1)
+                text= text + lora_input_text
+                img= img + lora_input_img
+                x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)
+                x = self.norm2(x)
+            else:
+                x_attention = self.lora_attention(x)
+                x = x + self.drop_path(self.attn(x))+ self.drop_path(x_attention) 
+                x = self.norm2(x)
 
             x = x + self.drop_path(self.mlp(x))
             x = self.norm3(x)
@@ -485,7 +498,6 @@ class Block(nn.Module):
                 x = self.skip_linear(torch.cat([x, skip], dim=-1))
                 x = self.norm1(x)
             if lora_input_text is not None and lora_input_img is not None:
-                
                 x = x + self.drop_path(self.attn(x))
                 t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, 77, 1, 1024), dim=1)
                 text= text + lora_input_text
@@ -579,15 +591,18 @@ class UViT(nn.Module):
 
         trunc_normal_(self.pos_embed, std=.02)
         self.apply(self._init_weights)
-        self.lora_adapters_itot = nn.ModuleList()
-        # for _ in range(30):
-        #     self.lora_adapters_itot.append(lora_cross_attention_itot())
         
-        # self.lora_adapters_ttoi = nn.ModuleList()
-        # for _ in range(30):
-        #     self.lora_adapters_ttoi.append(lora_cross_attention_ttoi())
+        ## lora 的初始化
+            
+        self.adapters_itot = nn.ModuleList()
+        for _ in range(30):
+            self.adapters_itot.append(lora_cross_attention_itot())
         
-        # print("lora_attention",self.in_blocks[0].lora_attention.to_q_lora.up.weight)
+        self.adapters_ttoi = nn.ModuleList()
+        for _ in range(30):
+            self.adapters_ttoi.append(lora_cross_attention_ttoi())
+        
+        # print("lora_attention",self.in_blocks[0].lora_attention.to_q.up.weight)
         # exit()
         self.token_embedding = nn.Embedding(2, embed_dim)
         self.pos_embed_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -647,10 +662,10 @@ class UViT(nn.Module):
         skips = []
         count = 0
         for blk in self.in_blocks:
-            if  hasattr(self, 'Lora'):
+            if not hasattr(self, 'Lora'):
                 t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
-                modelttoi = self.lora_adapters_ttoi[count]  
-                modelitot = self.lora_adapters_itot[count]
+                modelttoi = self.adapters_ttoi[count]  
+                modelitot = self.adapters_itot[count]
                 modelttoi.to('cuda')
                 modelitot.to('cuda')
             
@@ -667,17 +682,22 @@ class UViT(nn.Module):
         x = self.mid_block(x)
 
         for blk in self.out_blocks:
-            if hasattr(self, 'Lora'):
-                t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
-                modelttoi = self.lora_adapters_ttoi[count]  
-                modelitot = self.lora_adapters_itot[count]
-               
+            ## 虽然这里我感觉多此一举的添加了一个变量 y，还没有看懂用意，但是时候 maybe 需要花时间看看
+            
+            if not hasattr(self, 'Lora'):
+                skip = skips.pop()
+                y = x
+                y = blk.skip_linear(torch.cat([y, skip], dim=-1))
+                y = blk.norm1(y)
+                t_img_token, t_text_token, token_embed, text, clip_img, img = y.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
+                modelttoi = self.adapters_ttoi[count]  
+                modelitot = self.adapters_itot[count]
                 modelttoi.to('cuda')
                 modelitot.to('cuda')
                 lora_img = modelttoi(img,text)  
                 lora_text = modelitot(img,text)
-                x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)            
-                x = blk(x, skip = skips.pop(), lora_input_img = lora_img,lora_input_text = lora_text)    
+                del y         
+                x = blk(x, skip, lora_input_img = lora_img,lora_input_text = lora_text)    
                 count += 1
             else:
                 x = blk(x, skip = skips.pop(), lora_input_img = None, lora_input_text = None)

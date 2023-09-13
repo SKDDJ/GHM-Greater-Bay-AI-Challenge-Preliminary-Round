@@ -38,8 +38,8 @@ from transformers import AutoTokenizer,PretrainedConfig
 from pathlib import Path
 from libs.data import PersonalizedBase, PromptDataset, collate_fn
 from libs.uvit_multi_post_ln_v1 import UViT
-import diffusers
-from diffusers import DiffusionPipeline
+# import diffusers
+# from diffusers import DiffusionPipeline
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
@@ -51,7 +51,15 @@ from accelerate.logging import get_logger
 import itertools
 import json
 #from pathos.multiprocessing import ProcessingPool as Pool
-
+from peft import inject_adapter_in_model, LoraConfig,get_peft_model
+lora_config = LoraConfig(
+    inference_mode=False,
+    lora_alpha=16,
+    lora_dropout=0.1,
+    r=24,
+    bias="none",
+    # target_modules=["qkv","proj"],
+)
 
 
 # 保存text encoder中新增token的embedding
@@ -97,8 +105,6 @@ def import_model_class_from_model_name_or_path(pretrained_model_name_or_path: st
         from transformers import CLIPTextModel
 
         return CLIPTextModel
-    elif model_class == "RobertaSeriesModelWithTransformation":
-        from diffusers.pipelines.alt_diffusion.modeling_roberta_series import RobertaSeriesModelWithTransformation
 
         return RobertaSeriesModelWithTransformation
     else:
@@ -119,7 +125,16 @@ def train(config):
 
     args = get_args()
     concepts_list = args.concepts_list
+    # concepts_list = [
+    #         {
+    #             "instance_prompt": 'photo of a <new1> girl', #photo of a <new1> girl
+    #             "class_prompt": 'girl',#girl
+    #             "instance_data_dir": './train_data/oldgirl2',#./train_data/girl2
+    #             "class_data_dir": './real_reg/samples_girlbody/',#./real_reg/samples_person/
+    #         }
+    #     ]    
        # Generate class images if prior preservation is enabled.
+
     if config.with_prior_preservation:
         for i, concept in enumerate(concepts_list):
             # 目录文件处理
@@ -144,7 +159,8 @@ def train(config):
                 concepts_list[i] = concept
                 accelerator.wait_for_everyone()
             
-    pretrained_model_name_or_path = "/home/schengwei/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
+    # pretrained_model_name_or_path = "/home/wuyujia/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/133a221b8aa7292a167afc5127cb63fb5005638b"
+    pretrained_model_name_or_path = "huggingface"
     tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path,
             subfolder="tokenizer",
@@ -160,17 +176,25 @@ def train(config):
     # )
     text_encoder.to(device)
     train_state = utils.initialize_train_state(config, device, uvit_class=UViT,text_encoder = text_encoder)
-    logging.info(f'load nnet from {config.nnet_path}')
-    train_state.nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'), False)
 
 
+ 
     caption_decoder = CaptionDecoder(device=device, **config.caption_decoder)
 
 
     nnet, optimizer = accelerator.prepare(train_state.nnet, train_state.optimizer)
     nnet.to(device)
-    
-    # # 全参微调不加lora
+    # nnet = get_peft_model(nnet,lora_config)
+    # for i in range (15):
+    #         module = nnet.in_blocks[i].attn
+    #         module = inject_adapter_in_model(lora_config, module)
+    # module = nnet.mid_block
+    # module = inject_adapter_in_model(lora_config, module)
+    # for i in range (15):
+    #         module = nnet.out_blocks[i].attn
+    #         module = inject_adapter_in_model(lora_config, module)
+    # print("success_add_lora")       
+    # 全参微调不加lora
     # for name,param in nnet.named_parameters():
     #     param.requires_grad=True
     # for name,param in nnet.named_parameters():
@@ -178,28 +202,37 @@ def train(config):
     #         param.requires_grad = False  
     
     
-    # 非Lora部分不计算梯度
-    for name,param in nnet.named_parameters():
-        if 'lora_attention' in name or 'token_embedding' in name:
-            param.requires_grad = True
-        else:
-            param.requires_grad=False
 
+    # # 非Lora部分不计算梯度
+    # for name,param in nnet.named_parameters():
+    #     if 'lora_attention' in name or 'token_embedding' in name:
+    #         param.requires_grad = True
+    #     else:
+    #         param.requires_grad=False
+
+    # for name,param in nnet.named_parameters():
+    #     if 'lora' in name or 'token_embedding' in name:
+    #         param.requires_grad = True
+    #     else:
+    #         param.requires_grad=False
+
+    # for name,param in nnet.named_parameters():
+    #     if 'lora_attention' in name or 'token_embedding' in name or 'lora_adapters_ttoi' in name or 'lora_adapters_itot' in name:
+    #         param.requires_grad = True
+    #     else:
+    #         param.requires_grad=False
             
     # check the nnet's parameters if they are frozen
-    for name, param in nnet.named_parameters():
-        print(f'{name}: requires_grad={param.requires_grad}') 
-        
-    exit()
+    # for name, param in nnet.named_parameters():
+    #     print(f'{name}: requires_grad={param.requires_grad}') 
+    
     lr_scheduler = train_state.lr_scheduler
 
     autoencoder = libs.autoencoder.get_model(**config.autoencoder).to(device)
     
     autoencoder.requires_grad = False
     
-    # check the nnet's parameters if they are frozen
-    for name, param in nnet.named_parameters():
-        print(f'{name}: requires_grad={param.requires_grad}')
+
 
     
     # Modify the code of custom diffusion to directly import the clip text encoder 
@@ -293,7 +326,7 @@ def train(config):
                                       batch_size=2,
                                       shuffle=True,
                                       collate_fn=lambda examples: collate_fn(examples, args.with_prior_preservation),
-                                      num_workers=config.dataloader_num_workers,
+                                      num_workers=0,
                                       )
 
     train_data_generator = utils.get_data_generator(train_dataset_loader, enable_tqdm=accelerator.is_main_process, desc='train')
@@ -316,10 +349,11 @@ def train(config):
     #     if 'text_embed' in name or 'token_embedding' in name:
     #         param.requires_grad = True
     
-    # # 验证哪些参数被冻结
-    # for name, param in text_encoder.named_parameters():
-    #     if  param.requires_grad:
-    #         print(f"未冻结的参数: {name}")
+    # 验证哪些参数被冻结
+    for name, param in nnet.named_parameters():
+        if  param.requires_grad:
+            print(f"未冻结的参数: {name}")
+
 
     # total_frozen_params = sum(p.numel() for p in text_encoder.parameters() if  p.requires_grad)
  
@@ -341,22 +375,24 @@ def train(config):
         clip_img = clip_img_model.encode_image(img4clip).unsqueeze(1).contiguous()
         text = text_encoder(text)[0]
         text = caption_decoder.encode_prefix(text)
-       #z= false text = true
+        #z= false text = true
        
         bloss = LSimple_T2I(img=z,clip_img=clip_img, text=text, data_type=data_type, nnet=nnet, schedule=schedule, device=device, config=config,mask=mask)
         # bloss.requires_grad = True
         
         accelerator.backward(bloss)
-        # for name, param in nnet.named_parameters():
-        #     if param.grad is  None:
-        #         print(name)
+        for name, param in nnet.named_parameters():
+            if param.grad is not None:
+                print(name)
+    
+        
 
         # for name, param in text_encoder.named_parameters():
         #     if param.grad is not None:
         #         print(name)
         # 如果参数的梯度不为None，说明存在梯度
-            
-               
+        
+       
         # Zero out the gradients for all token embeddings except the newly added
         # embeddings for the concept, as we only want to optimize the concept embeddings
         if True:
@@ -389,8 +425,7 @@ def train(config):
         #  更新参数
         optimizer.step()
         lr_scheduler.step()
-        
-        train_state.ema_update(config.get('ema_rate', 0.9999))
+        # train_state.ema_update(config.get('ema_rate', 0.9999))这个参数影响添加peft训练
         train_state.step += 1
         
         optimizer.zero_grad()
@@ -424,12 +459,11 @@ def train(config):
                 metrics = train_step()
             print("metrics",metrics)
             count+=1
-            print(count)
+         
             accelerator.wait_for_everyone()
             
             if accelerator.is_main_process:
                 # nnet.eval()
-                
                 total_step = train_state.step * config.batch_size
                 if total_step >= log_step:
                     logging.info(utils.dct2str(dict(step=total_step, **metrics)))
@@ -446,13 +480,13 @@ def train(config):
                 #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                 #     save_step += config.save_interval
                    
-                if total_step >= 1000:
+                if total_step >= 600:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                     train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    # train_state.save_lora(os.path.join(config.outdir, 'lora.pt.tmp'))
                     break
 
-            
 
     loop()
 
@@ -612,11 +646,11 @@ if __name__ == "__main__":
 
 """ 
 accelerate launch train.py \
-  --instance_data_dir="/home/schengwei/competition/train_data/oldgirl2" \
-  --outdir="/home/schengwei/competition/model_output/girl2"\
-  --class_data_dir "/home/schengwei/competition/real_reg/samples_girlbody" \
+  --instance_data_dir="train_data/newboy1" \
+  --outdir="model_output/boy11"\
+  --class_data_dir="real_reg/samples_boyface" \
   --with_prior_preservation  --prior_loss_weight=1.0 \
-  --class_prompt="girl" --num_class_images=200 \
-  --instance_prompt="photo of a <new1> girl"  \
+  --class_prompt="boy" --num_class_images=200 \
+  --instance_prompt=" a <new1> boy"  \
   --modifier_token "<new1>"
 """
