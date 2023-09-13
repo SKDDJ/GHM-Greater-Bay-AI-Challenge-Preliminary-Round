@@ -28,14 +28,14 @@ def _transform(n_px):
     ])
 
 def collate_fn(examples, with_prior_preservation=False):
-    has_attention_mask = "instance_attention_mask" in examples[0]
-
+    # has_attention_mask = "instance_attention_mask" in examples[0]
+    
     input_ids = [example["instance_prompt_ids"] for example in examples]#实例id
     pixel_values = [example["instance_images"] for example in examples]#实例图像
     clip_img = [example["instance_clip_images"] for example in examples]
     mask = [example["mask"] for example in examples]
-    if has_attention_mask:
-        attention_mask = [example["instance_attention_mask"] for example in examples]
+    # if has_attention_mask:
+    #     attention_mask = [example["instance_attention_mask"] for example in examples]
 
     # Concat class and instance examples for prior preservation.
     # We do this to avoid doing two forward passes.
@@ -43,25 +43,22 @@ def collate_fn(examples, with_prior_preservation=False):
         input_ids += [example["class_prompt_ids"] for example in examples]
         pixel_values += [example["class_images"] for example in examples]
         clip_img += [example["class_clip_images"] for example in examples]
-        if has_attention_mask:
-            attention_mask += [example["class_attention_mask"] for example in examples]
-
+        mask += [example["class_mask"] for example in examples]
+        # if has_attention_mask:
+        #     attention_mask += [example["class_attention_mask"] for example in examples]
+    clip_img = torch.stack(clip_img)
     pixel_values = torch.stack(pixel_values)
+    mask = torch.stack(mask)
     pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
-
+    mask = mask.to(memory_format=torch.contiguous_format).float()
+    clip_img = clip_img.to(memory_format=torch.contiguous_format).float()
     input_ids = torch.cat(input_ids, dim=0)
-    mask = torch.cat(mask , dim = 0)
-    batch = {
-        "input_ids": input_ids,
-        "pixel_values": pixel_values,
-        "clip_img": clip_img,
-        "mask": mask,
-    }
-    clip_img = torch.cat(clip_img, dim=0)
-    if has_attention_mask:
-        attention_mask = torch.cat(attention_mask, dim=0)
-        batch["attention_mask"] = attention_mask
+    mask = mask.unsqueeze(1)
     
+    
+    # if has_attention_mask:
+    #     attention_mask = torch.cat(attention_mask, dim=0)
+    #     batch["attention_mask"] = attention_mask
     return input_ids,pixel_values,clip_img,mask
 
 
@@ -134,10 +131,10 @@ class PersonalizedBase(Dataset):
 
             class_data_root = Path(concept["class_data_dir"])
         
-           
+       
             if os.path.isdir(class_data_root):
                 class_images_path = list(class_data_root.iterdir())
-                print("class_images_path",class_images_path)
+               
                 class_prompt = [concept["class_prompt"] for _ in range(len(class_images_path))]
             else:
                 with open(class_data_root, "r") as f:
@@ -147,9 +144,11 @@ class PersonalizedBase(Dataset):
 
             class_img_path = [(x, y) for (x, y) in zip(class_images_path, class_prompt)]
             self.class_images_path.extend(class_img_path[:num_class_images])
-        self.transform_clip = _transform(224)
+       
+        self.transform_clip = _transform(224)#将clip_img 转化为224分辨率
         random.shuffle(self.instance_images_path)
         self.num_instance_images = len(self.instance_images_path)
+       
         self.num_class_images = len(self.class_images_path)
         self._length = max(self.num_class_images, self.num_instance_images)
         self.flip = transforms.RandomHorizontalFlip(0.5 * hflip)
@@ -168,6 +167,7 @@ class PersonalizedBase(Dataset):
         return self._length
     
     def preprocess(self, image, scale, resample):
+### 在这里强行加了一堆 64*64 的mask，动态的 mask 有点问题，不确定影响大不大        
         outer, inner = self.size, scale
         factor = self.size // self.mask_size
         if scale > self.size:
@@ -175,28 +175,37 @@ class PersonalizedBase(Dataset):
         top, left = np.random.randint(0, outer - inner + 1), np.random.randint(0, outer - inner + 1)
         image = image.resize((scale, scale), resample=resample)
         image = np.array(image).astype(np.uint8)
+   
         image = (image / 127.5 - 1.0).astype(np.float32)
         instance_image = np.zeros((self.size, self.size, 3), dtype=np.float32)
         mask = np.zeros((self.size // factor, self.size // factor))
         if scale > self.size:
             instance_image = image[top : top + inner, left : left + inner, :]
             mask = np.ones((self.size // factor, self.size // factor))
+            mask = np.ones((64,64))
+         
         else:
             instance_image[top : top + inner, left : left + inner, :] = image
             mask[
                 top // factor + 1 : (top + scale) // factor - 1, left // factor + 1 : (left + scale) // factor - 1
             ] = 1.0
+            mask = np.ones((64,64))
+          
+            
+        
         return instance_image, mask
 
     def __getitem__(self, index):
         example = {}
         instance_image, instance_prompt = self.instance_images_path[index % self.num_instance_images]
+    
         instance_image = Image.open(instance_image)
+        
         if not instance_image.mode == "RGB":
             instance_image = instance_image.convert("RGB")
         example["instance_clip_images"] = self.transform_clip(instance_image)
         instance_image = self.flip(instance_image)
-
+        
         # apply resize augmentation and create a valid image region mask
         random_scale = self.size
         if self.aug:
@@ -205,8 +214,11 @@ class PersonalizedBase(Dataset):
                 if np.random.uniform() < 0.66
                 else np.random.randint(int(1.2 * self.size), int(1.4 * self.size))
             )
+        
+        
+        
         instance_image, mask = self.preprocess(instance_image, random_scale, self.interpolation)
-
+        
         if random_scale < 0.6 * self.size:
             instance_prompt = np.random.choice(["a far away ", "very small "]) + instance_prompt
         elif random_scale > self.size:
@@ -214,6 +226,7 @@ class PersonalizedBase(Dataset):
         
         example["instance_images"] = torch.from_numpy(instance_image).permute(2, 0, 1)
         example["mask"] = torch.from_numpy(mask)
+        #torch.Size([3, 512, 512]) torch.Size([64, 64])
         example["instance_prompt_ids"] = self.tokenizer(
             instance_prompt,
             truncation=True,
@@ -221,10 +234,15 @@ class PersonalizedBase(Dataset):
             max_length=self.tokenizer.model_max_length,
             return_tensors="pt",
         ).input_ids
-
-        
+        # tensor([[49406,  1125,   539,   320, 49408,  1611, 49407, 49407, 49407, 49407,
+        #  49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407,
+        #  49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407,
+        #  49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407,
+        #  49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407,
+        #  49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407,
+        #  49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407, 49407,
+        #  49407, 49407, 49407, 49407, 49407, 49407, 49407]])
         class_image, class_prompt = self.class_images_path[index % self.num_class_images]
-        print(class_image,class_prompt)
         class_image = Image.open(class_image)
         if not class_image.mode == "RGB":
             class_image = class_image.convert("RGB")
@@ -238,5 +256,5 @@ class PersonalizedBase(Dataset):
             return_tensors="pt",
         ).input_ids
         example["class_clip_images"] = self.transform_clip(class_image)
-        
+      
         return example

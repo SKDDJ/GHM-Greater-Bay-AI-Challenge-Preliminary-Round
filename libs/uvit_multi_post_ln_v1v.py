@@ -1,6 +1,3 @@
-"""
-模型文件, 包含了UViT的模型设计
-"""
 import torch
 import torch.nn as nn
 import math
@@ -8,6 +5,69 @@ from .timm import trunc_normal_, DropPath, Mlp
 import einops
 import torch.utils.checkpoint
 import torch.nn.functional as F
+
+
+class LoraLayer(nn.Module):
+    def __init__(self,raw_linear,in_features,out_features,r,alpha):
+        super().__init__()
+        self.r=r 
+        self.alpha=alpha
+        self.lora_a=nn.Parameter(torch.empty((in_features,r)))
+        self.lora_b=nn.Parameter(torch.zeros((r,out_features)))
+    
+        nn.init.kaiming_uniform_(self.lora_a,a=math.sqrt(5))
+
+        self.raw_linear=raw_linear
+    
+    def forward(self,x):    # x:(batch_size,in_features)
+        raw_output=self.raw_linear(x)   
+        lora_output=x@((self.lora_a@self.lora_b)*self.alpha/self.r)    # matmul(x,matmul(lora_a,lora_b)*alpha/r)
+        return raw_output+lora_output
+
+def inject_lora(model,name,layer):
+    name_cols=name.split('.')
+
+    # 逐层下探到linear归属的module
+    children=name_cols[:-1]
+    cur_layer=model 
+    for child in children:
+        cur_layer=getattr(cur_layer,child)
+    
+    #print(layer==getattr(cur_layer,name_cols[-1]))
+    lora_layer=LoraLayer(layer,layer.in_features,layer.out_features,24,1)
+    setattr(cur_layer,name_cols[-1],lora_layer)
+
+
+
+class LoRALinearLayer(nn.Module):
+    def __init__(self, in_features, out_features, rank=24, network_alpha=None, device='cuda:0', dtype=None):
+        super().__init__()
+        
+        
+        if rank > min(in_features, out_features):
+            raise ValueError(f"LoRA rank {rank} must be less or equal than {min(in_features, out_features)}")
+
+        self.down = nn.Linear(in_features, rank, bias=False, device=device, dtype=dtype)
+        self.up = nn.Linear(rank, out_features, bias=False, device=device, dtype=dtype)
+        self.network_alpha = network_alpha
+        self.rank = rank
+
+        nn.init.normal_(self.down.weight, std=1 / rank)
+        nn.init.zeros_(self.up.weight)
+
+    def forward(self, hidden_states):
+        orig_dtype = hidden_states.dtype
+        dtype = self.down.weight.dtype
+
+        down_hidden_states = self.down(hidden_states.to(dtype))
+        up_hidden_states = self.up(down_hidden_states)
+
+        if self.network_alpha is not None:
+            up_hidden_states *= self.network_alpha / self.rank
+        
+        return up_hidden_states.to(orig_dtype)
+
+
 
 if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
     ATTENTION_MODE = 'flash'
@@ -102,6 +162,53 @@ class Attention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+    
+class LoraAttention(nn.Module):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.,rank = 24, network_alpha = None):
+        super().__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+        self.to_q_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.to_k_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.to_v_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.to_out_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x):
+        B, L, C = x.shape
+        q = self.to_q_lora(x)
+        k = self.to_k_lora(x)
+        v = self.to_v_lora(x)
+        # qkv = self.qkv(x)
+        if ATTENTION_MODE == 'flash':
+            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+            q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+            x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+            x = einops.rearrange(x, 'B H L D -> B L (H D)')
+        elif ATTENTION_MODE == 'xformers':
+            q = einops.rearrange(q, 'B L (H D) -> B L H D', H=self.num_heads)
+            k = einops.rearrange(k, 'B L (H D) -> B L H D', H=self.num_heads)
+            v = einops.rearrange(v, 'B L (H D) -> B L H D', H=self.num_heads)
+            x = xformers.ops.memory_efficient_attention(q, k, v)
+            x = einops.rearrange(x, 'B L H D -> B L (H D)', H=self.num_heads)
+        elif ATTENTION_MODE == 'math':
+            with torch.amp.autocast(device_type='cuda', enabled=False):
+                qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+                q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+                attn = (q @ k.transpose(-2, -1)) * self.scale
+                attn = attn.softmax(dim=-1)
+                attn = self.attn_drop(attn)
+                x = (attn @ v).transpose(1, 2).reshape(B, L, C)
+        else:
+            raise NotImplemented
+
+        x = self.to_out_lora(x)
+        x = self.proj_drop(x)
+        return x
+    
 
 
 class Block(nn.Module):
@@ -111,7 +218,7 @@ class Block(nn.Module):
         super().__init__()
         self.norm1 = norm_layer(dim) if skip else None
         self.norm2 = norm_layer(dim)
-
+        #self.lora_attention = LoraAttention(dim, num_heads=num_heads,qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -120,6 +227,14 @@ class Block(nn.Module):
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.skip_linear = nn.Linear(2 * dim, dim) if skip else None
         self.use_checkpoint = use_checkpoint
+    def add_lora(self,Lora):
+        self.lora_attn = Lora
+        
+    def forward(self, x, skip=None, lora_input_img = None, lora_input_text = None):
+        if self.use_checkpoint:
+            return torch.utils.checkpoint.checkpoint(self._forward, x, skip, lora_input_img, lora_input_text)
+        else:
+            return self._forward(x, skip, lora_input_img, lora_input_text)
 
     def forward(self, x, skip=None):
         if self.use_checkpoint:
@@ -161,10 +276,13 @@ class UViT(nn.Module):
                  norm_layer=nn.LayerNorm, mlp_time_embed=False, use_checkpoint=False,
                  text_dim=None, num_text_tokens=None, clip_img_dim=None):
         super().__init__()
+
         self.in_chans = in_chans
         self.patch_size = patch_size
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
 
+      
+        
         self.patch_embed = PatchEmbed(patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         self.img_size = (img_size, img_size) if isinstance(img_size, int) else img_size  # the default img size
         assert self.img_size[0] % patch_size == 0 and self.img_size[1] % patch_size == 0
@@ -216,9 +334,13 @@ class UViT(nn.Module):
 
         trunc_normal_(self.pos_embed, std=.02)
         self.apply(self._init_weights)
-
+        
+        # print("lora_attention",self.in_blocks[0].lora_attention.to_q_lora.up.weight)
+        # exit()
         self.token_embedding = nn.Embedding(2, embed_dim)
         self.pos_embed_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+    def add_lora(self,Lora):
+        self.Lora = Lora
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -247,7 +369,7 @@ class UViT(nn.Module):
         clip_img = self.clip_img_embed(clip_img)
         token_embed = self.token_embedding(data_type).unsqueeze(dim=1)
         
-        #     
+        
         #     t_img_token torch.Size([2, 1, 1536])
         #     t_text_token torch.Size([2, 1, 1536])
         #     token_embed torch.Size([2, 1, 1536])
@@ -257,7 +379,7 @@ class UViT(nn.Module):
             
         x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)
         num_text_tokens, num_img_tokens = text.size(1), img.size(1)
-        
+
         pos_embed = torch.cat(
             [self.pos_embed[:, :1 + 1, :], self.pos_embed_token, self.pos_embed[:, 1 + 1:, :]], dim=1)
         if H == self.img_size[0] and W == self.img_size[1]:
@@ -271,18 +393,21 @@ class UViT(nn.Module):
         x = x + pos_embed
         x = self.pos_drop(x)
         skips = []
+        count = 0
         for blk in self.in_blocks:
             x = blk(x)
+            count += 1
             skips.append(x)
-
+   
         x = self.mid_block(x)
 
         for blk in self.out_blocks:
-            x = blk(x, skips.pop())
+            x = blk(x, skip = skips.pop())
 
         x = self.norm(x)
 
         t_img_token_out, t_text_token_out, token_embed_out, text_out, clip_img_out, img_out = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)
+        
 
         img_out = self.decoder_pred(img_out)
         img_out = unpatchify(img_out, self.in_chans)
@@ -291,3 +416,12 @@ class UViT(nn.Module):
 
         text_out = self.text_out(text_out)
         return img_out, clip_img_out, text_out
+
+
+
+    # lora权重的加载
+    try:
+        restore_lora_state=torch.load('lora.pt')
+        nnet.load_state_dict(restore_lora_state,strict=False)
+    except:
+        raise ValueError("lora.pt not found")

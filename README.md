@@ -114,10 +114,17 @@ accelerate launch --mixed_precision fp16 --num_processes 1 train.py -d '<训练�
 
 
 生成代码说明:
+<<<<<<< HEAD
 需要训练生成一个nnet之后才能运行
 基于prompt文件生成图片:
 ```shell
 python sample.py --restore_path './model_output_test' --prompt_path './eval_prompts/boy1.json' --output_path './output_test'
+=======
+
+基于prompt文件生成图片:
+```shell
+python sample.py --restore_path '<模型输出>' --prompt_path '<prompt文件路径>' --output_path '<输出路径>'
+>>>>>>> origin/wuyujia
 ```
 基于所有的prompt文件进行生成:
 ```

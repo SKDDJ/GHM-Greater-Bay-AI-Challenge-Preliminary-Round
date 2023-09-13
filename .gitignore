@@ -15,6 +15,12 @@ train_data/*
 
 
 ## weights anf lib
-CLIP/
+CLIP/*
 .cache/
 .insightface
+
+train_data/
+
+real_reg/
+
+CLIP/

@@ -18,13 +18,16 @@ def get_config():
     config.text_dim = 64  # reduce dimension
     config.data_type = 1
     config.gradient_accumulation_steps = 1
+
     config.log_interval = 50
     config.eval_interval = 100
-    config.save_interval = 300
-    # config.max_step = 400
     
-    config.max_step = 1000
-    config.batch_size = 1
+    
+    config.save_interval = 200
+
+    
+    config.max_step = 200
+    config.batch_size = 2
     
     config.center_crop = True
     config.real_prior = True
@@ -34,7 +37,7 @@ def get_config():
     
     config.max_grad_norm = 1.0
     
-    config.dataloader_num_workers = 10
+    config.dataloader_num_workers = 10 # original is 10
     
    #  config.sample_batch_size = 4  it seems uesless...
     config.revision = None
@@ -53,15 +56,16 @@ def get_config():
 
     config.optimizer = d(
         name='adamw',
-        lr=5e-6,
-        weight_decay=0.03,
-        betas=(0.9, 0.9),
-        amsgrad=False
+        lr=2e-05, # for custom diffusion, lr=5e-6, but in code is will double if with preservation is True.
+        weight_decay=1e-2, # 0.03
+        betas=(0.9, 0.999),# adam_beta2 changed from 0.9 to 0.999, same as Custom Diffusion.
+        amsgrad=False,
+        eps=1e-8, # adam_eps added 
     )
 
     config.lr_scheduler = d(
         name='customized',
-        warmup_steps=500
+        warmup_steps=500 ## 这个 warmup 的步数究竟多少比较合适？
     )
 
     config.autoencoder = d(
@@ -103,7 +107,7 @@ def get_config():
     config.sample = d(
         sample_steps=100, # 我从 30 调到了 100
         scale=7.,
-        t2i_cfg_mode='true_uncond' # 笑死，之前用的是true_uncond模式，生成的图片能看才见鬼
+        t2i_cfg_mode='true_uncond' # 笑死，之前sample 中的也是用的是true_uncond模式，生成的图片能看才见鬼
     )
 
     return config

@@ -5,6 +5,8 @@ from .timm import trunc_normal_, DropPath, Mlp
 import einops
 import torch.utils.checkpoint
 import torch.nn.functional as F
+import loralib as lora
+
 class LoRALinearLayer(nn.Module):
     def __init__(self, in_features, out_features, rank=24, network_alpha=None, device='cuda:0', dtype=None):
         super().__init__()
@@ -33,7 +35,7 @@ class LoRALinearLayer(nn.Module):
         
         return up_hidden_states.to(orig_dtype)
 
-class lora_cross_attention(nn.Module):
+class lora_cross_attention_ttoi(nn.Module):
     def __init__(self, img_dim=1024, rank=24, text_dim=77, heads=8, qkv_bias=False, qk_scale=None, attn_dorp=0.,proj_drop=0., hidden_size=1536, dropout = 0.0, network_alpha=None):
 
         super().__init__()
@@ -119,8 +121,7 @@ class lora_cross_attention(nn.Module):
         )
         del baddbmm_input
 
-        
-
+    
         attention_probs = attention_scores.softmax(dim=-1)
         del attention_scores
 
@@ -161,19 +162,136 @@ class lora_cross_attention(nn.Module):
         hidden_states = self.to_out_custom_diffusion[1](hidden_states)
         
         return hidden_states
+    
+class lora_cross_attention_itot(nn.Module):
+    def __init__(self, img_dim=1024, rank=24, text_dim=77, heads=8, qkv_bias=False, qk_scale=None, attn_dorp=0.,proj_drop=0., hidden_size=1536, dropout = 0.0, network_alpha=None):
+
+        super().__init__()
+        self.heads = heads
+        self.scale = qk_scale or (hidden_size//self.heads) ** -0.5
+        self.hidden_size = hidden_size
+        self.img_dim = img_dim
+        self.text_dim = text_dim
+        self.rank = rank
+        self.to_q_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
+        self.to_k_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
+        self.to_v_lora = LoRALinearLayer(hidden_size, hidden_size, rank, network_alpha)
+        self.to_out_custom_diffusion = nn.ModuleList([])
+        self.to_out_custom_diffusion.append(nn.Linear(hidden_size, hidden_size, bias=True))
+        self.to_out_custom_diffusion.append(nn.Dropout(dropout))
+    
+    def head_to_batch_dim(self, tensor, out_dim=3):
+        head_size = self.heads
+        batch_size, seq_len, dim = tensor.shape
+        tensor = tensor.reshape(batch_size, seq_len, head_size, dim // head_size)
+        tensor = tensor.permute(0, 2, 1, 3)
+
+        if out_dim == 3:
+            tensor = tensor.reshape(batch_size * head_size, seq_len, dim // head_size)
+
+        return tensor
+    
+    def batch_to_head_dim(self, tensor):
+        head_size = self.heads
+        batch_size, seq_len, dim = tensor.shape
+        tensor = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
+        tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
+        return tensor
+    
+    def prepare_attention_mask(self, attention_mask, target_length, batch_size=2, out_dim=3):
+
+        head_size = self.heads
+        if attention_mask is None:
+            return attention_mask
+
+        current_length: int = attention_mask.shape[-1]
+        if current_length != target_length:
+            if attention_mask.device.type == "mps":
+                # HACK: MPS: Does not support padding by greater than dimension of input tensor.
+                # Instead, we can manually construct the padding tensor.
+                padding_shape = (attention_mask.shape[0], attention_mask.shape[1], target_length)
+                padding = torch.zeros(padding_shape, dtype=attention_mask.dtype, device=attention_mask.device)
+                attention_mask = torch.cat([attention_mask, padding], dim=2)
+            else:
+                # TODO: for pipelines such as stable-diffusion, padding cross-attn mask:
+                #       we want to instead pad by (0, remaining_length), where remaining_length is:
+                #       remaining_length: int = target_length - current_length
+                # TODO: re-enable tests/models/test_models_unet_2d_condition.py#test_model_xattn_padding
+                attention_mask = F.pad(attention_mask, (0, target_length), value=0.0)
+
+        if out_dim == 3:
+            if attention_mask.shape[0] < batch_size * head_size:
+                attention_mask = attention_mask.repeat_interleave(head_size, dim=0)
+        elif out_dim == 4:
+            attention_mask = attention_mask.unsqueeze(1)
+            attention_mask = attention_mask.repeat_interleave(head_size, dim=1)
+
+        return attention_mask
+    
+    def get_attention_scores(self, query, key, attention_mask=None):
+        dtype = query.dtype
+
+        if attention_mask is None:
+            baddbmm_input = torch.empty(
+                query.shape[0], query.shape[1], key.shape[1], dtype=query.dtype, device=query.device
+            )
+            beta = 0
+        else:
+            baddbmm_input = attention_mask
+            beta = 1
+
+        attention_scores = torch.baddbmm(
+            baddbmm_input,
+            query,
+            key.transpose(-1, -2),
+            beta=beta,
+            alpha=self.scale,
+        )
+        del baddbmm_input
+
+    
+        attention_probs = attention_scores.softmax(dim=-1)
+        del attention_scores
+
+        attention_probs = attention_probs.to(dtype)
+
+        return attention_probs
+    
+    def forward(self, img , text, attention_mask=None):
+        batch_size = 2
+        #添加mask
+        attention_mask = self.prepare_attention_mask(attention_mask, 1024, batch_size)
+        
+        query = self.to_q_lora(text)#得到query架构仍然为77*1536
+        key = self.to_k_lora(img)
+        value =self.to_v_lora(img)#仍为77*1536
+        # key = key.to(attn.to_q.weight.dtype)
+        # value = value.to(attn.to_q.weight.dtype)
+
+        #优化方法，可选择添加
+        detach = torch.ones_like(key)
+        detach[:, :1, :] = detach[:, :1, :] * 0.0
+        key = detach * key + (1 - detach) * key.detach()
+        value = detach * value + (1 - detach) * value.detach()
 
 
-class ModelWithAdapter(nn.Module):
-    def __init__(self, pretrained_attention_model, adapter):
-        super(ModelWithAdapter, self).__init__()
-        self.pretrained_attention_model = pretrained_attention_model
-        self.adapter = adapter
+        #多头注意力
+        query = self.head_to_batch_dim(query)
+        key = self.head_to_batch_dim(key)
+        value = self.head_to_batch_dim(value)
+        attention_probs = self.get_attention_scores(query, key, attention_mask)
+        hidden_states = torch.bmm(attention_probs, value)
+        hidden_states = self.batch_to_head_dim(hidden_states)
+    
+        # linear proj
+        hidden_states = self.to_out_custom_diffusion[0](hidden_states)
+        
+        # dropout
+        hidden_states = self.to_out_custom_diffusion[1](hidden_states)
+ 
+        return hidden_states
 
-    def forward(self, input_data):
-        attention_output = self.pretrained_attention_model(input_data)
-        adapter_output = self.adapter(attention_output)
-        final_output = attention_output + adapter_output
-        return final_output
+
 
 
 if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
@@ -236,7 +354,8 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+ #       self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.qkv = lora.MergedLinear(dim, dim * 3, r=8, enable_lora=[True, True, True])
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -269,6 +388,53 @@ class Attention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+    
+class LoraAttention(nn.Module):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.,rank = 24, network_alpha = None):
+        super().__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+        self.to_q_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.to_k_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.to_v_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.to_out_lora = LoRALinearLayer(dim, dim, rank, network_alpha)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x):
+        B, L, C = x.shape
+        q = self.to_q_lora(x)
+        k = self.to_k_lora(x)
+        v = self.to_v_lora(x)
+        # qkv = self.qkv(x)
+        if ATTENTION_MODE == 'flash':
+            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+            q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+            x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+            x = einops.rearrange(x, 'B H L D -> B L (H D)')
+        elif ATTENTION_MODE == 'xformers':
+            q = einops.rearrange(q, 'B L (H D) -> B L H D', H=self.num_heads)
+            k = einops.rearrange(k, 'B L (H D) -> B L H D', H=self.num_heads)
+            v = einops.rearrange(v, 'B L (H D) -> B L H D', H=self.num_heads)
+            x = xformers.ops.memory_efficient_attention(q, k, v)
+            x = einops.rearrange(x, 'B L H D -> B L (H D)', H=self.num_heads)
+        elif ATTENTION_MODE == 'math':
+            with torch.amp.autocast(device_type='cuda', enabled=False):
+                qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+                q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+                attn = (q @ k.transpose(-2, -1)) * self.scale
+                attn = attn.softmax(dim=-1)
+                attn = self.attn_drop(attn)
+                x = (attn @ v).transpose(1, 2).reshape(B, L, C)
+        else:
+            raise NotImplemented
+
+        x = self.to_out_lora(x)
+        x = self.proj_drop(x)
+        return x
+    
 
 
 class Block(nn.Module):
@@ -278,7 +444,7 @@ class Block(nn.Module):
         super().__init__()
         self.norm1 = norm_layer(dim) if skip else None
         self.norm2 = norm_layer(dim)
-
+        #self.lora_attention = LoraAttention(dim, num_heads=num_heads,qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.attn = Attention(
             dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -287,6 +453,14 @@ class Block(nn.Module):
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
         self.skip_linear = nn.Linear(2 * dim, dim) if skip else None
         self.use_checkpoint = use_checkpoint
+    def add_lora(self,Lora):
+        self.lora_attn = Lora
+        
+    def forward(self, x, skip=None, lora_input_img = None, lora_input_text = None):
+        if self.use_checkpoint:
+            return torch.utils.checkpoint.checkpoint(self._forward, x, skip, lora_input_img, lora_input_text)
+        else:
+            return self._forward(x, skip, lora_input_img, lora_input_text)
 
     def forward(self, x, skip=None):
         if self.use_checkpoint:
@@ -328,10 +502,13 @@ class UViT(nn.Module):
                  norm_layer=nn.LayerNorm, mlp_time_embed=False, use_checkpoint=False,
                  text_dim=None, num_text_tokens=None, clip_img_dim=None):
         super().__init__()
+
         self.in_chans = in_chans
         self.patch_size = patch_size
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
 
+      
+        
         self.patch_embed = PatchEmbed(patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         self.img_size = (img_size, img_size) if isinstance(img_size, int) else img_size  # the default img size
         assert self.img_size[0] % patch_size == 0 and self.img_size[1] % patch_size == 0
@@ -383,7 +560,9 @@ class UViT(nn.Module):
 
         trunc_normal_(self.pos_embed, std=.02)
         self.apply(self._init_weights)
-
+        
+        # print("lora_attention",self.in_blocks[0].lora_attention.to_q_lora.up.weight)
+        # exit()
         self.token_embedding = nn.Embedding(2, embed_dim)
         self.pos_embed_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
     def add_lora(self,Lora):
@@ -440,31 +619,16 @@ class UViT(nn.Module):
         x = x + pos_embed
         x = self.pos_drop(x)
         skips = []
-        count = 0 
+        count = 0
         for blk in self.in_blocks:
-            if hasattr(self, 'Lora'):
-                t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)
-                model = lora_cross_attention()
-                model.to('cuda')
-                lora_img = model(img, text)
-                x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)
-            
-                x = blk(x)
-                t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)
-                img = img + lora_img
-        
-                x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)
-                
-            else:
-                print("未加lora")
-                x = blk(x)
-                count += 1
+            x = blk(x)
+            count += 1
             skips.append(x)
-  
+   
         x = self.mid_block(x)
 
         for blk in self.out_blocks:
-            x = blk(x, skips.pop())
+            x = blk(x, skip = skips.pop())
 
         x = self.norm(x)
 
@@ -478,3 +642,5 @@ class UViT(nn.Module):
 
         text_out = self.text_out(text_out)
         return img_out, clip_img_out, text_out
+
+
