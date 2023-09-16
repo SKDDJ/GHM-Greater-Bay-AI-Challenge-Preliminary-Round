@@ -176,16 +176,16 @@ class lora_cross_attention_itot(nn.Module):
         self.img_dim = img_dim
         self.text_dim = text_dim
         self.rank = rank
-        self.to_q = nn.Linear(hidden_size, hidden_size)
-        self.to_k = nn.Linear(hidden_size, hidden_size)
-        self.to_v = nn.Linear(hidden_size, hidden_size)
+        self.to_q_l = nn.Linear(hidden_size, hidden_size)
+        self.to_k_l = nn.Linear(hidden_size, hidden_size)
+        self.to_v_l = nn.Linear(hidden_size, hidden_size)
         self.attn_drop = nn.Dropout(attn_drop)
-        self.to_out = nn.Linear(hidden_size, hidden_size)
+        self.to_out_l = nn.Linear(hidden_size, hidden_size)
         self.proj_drop = nn.Dropout(proj_drop)
-        nn.init.zeros_(self.to_q.weight)
-        nn.init.zeros_(self.to_k.weight)
-        nn.init.zeros_(self.to_v.weight)
-        nn.init.zeros_(self.to_out.weight)
+        nn.init.zeros_(self.to_q_l.weight)
+        nn.init.zeros_(self.to_k_l.weight)
+        nn.init.zeros_(self.to_v_l.weight)
+        nn.init.zeros_(self.to_out_l.weight)
         
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
@@ -269,9 +269,9 @@ class lora_cross_attention_itot(nn.Module):
         #添加mask
         attention_mask = self.prepare_attention_mask(attention_mask, 1024, batch_size)
         
-        query = self.to_q(text)#得到query架构仍然为77*1536
-        key = self.to_k(img)
-        value =self.to_v(img)#仍为77*1536
+        query = self.to_q_l(text)#得到query架构仍然为77*1536
+        key = self.to_k_l(img)
+        value =self.to_v_l(img)#仍为77*1536
         # key = key.to(attn.to_q.weight.dtype)
         # value = value.to(attn.to_q.weight.dtype)
 
@@ -291,11 +291,15 @@ class lora_cross_attention_itot(nn.Module):
         hidden_states = self.batch_to_head_dim(hidden_states)
     
         # linear proj
-        hidden_states = self.to_out(hidden_states)
+        hidden_states = self.to_out_l(hidden_states)
+        self.to_out_l.bias.data.zero_()
+        
+       
         # dropout
         hidden_states = self.proj_drop(hidden_states)
      
-    
+        hidden_states.zero_()
+        print("h",hidden_states)
         return hidden_states
 
 
@@ -395,7 +399,7 @@ class Attention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
-
+    
 class LoraAttention(nn.Module):
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.,rank = 24, network_alpha = None):
         super().__init__()

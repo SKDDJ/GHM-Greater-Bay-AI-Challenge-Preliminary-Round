@@ -160,7 +160,8 @@ def train(config):
                 accelerator.wait_for_everyone()
             
     pretrained_model_name_or_path = "/home/wuyujia/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/133a221b8aa7292a167afc5127cb63fb5005638b"
-    # pretrained_model_name_or_path = "./huggingface"
+    # pretrained_model_name_or_path = "huggingface"
+    #pretrained_model_name_or_path = "/home/shiyiming/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
     tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path,
             subfolder="tokenizer",
@@ -461,8 +462,7 @@ def train(config):
             count+=1
          
             accelerator.wait_for_everyone()
-            if count == 2:
-                exit()
+            
             if accelerator.is_main_process:
                 # nnet.eval()
                 total_step = train_state.step * config.batch_size
@@ -480,8 +480,8 @@ def train(config):
                 #     logging.info(f'Save and eval checkpoint {total_step}...')
                 #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                 #     save_step += config.save_interval
-
-                if total_step >= 600:
+                   
+                if total_step >= 50:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
                     train_state.save(os.path.join(config.outdir, 'final.ckpt'))
@@ -646,12 +646,14 @@ if __name__ == "__main__":
 
 
 """ 
-accelerate launch train.py \
+accelerate launch trainn.py \
   --instance_data_dir="train_data/newboy1" \
-  --outdir="model_output/boy11"\
+  --outdir="model_output/boy1"\
   --class_data_dir="real_reg/samples_boyface" \
   --with_prior_preservation  --prior_loss_weight=1.0 \
   --class_prompt="boy" --num_class_images=200 \
   --instance_prompt=" a <new1> boy"  \
   --modifier_token "<new1>"
+  
+  export LD_LIBRARY_PATH=/home/shiyiming/anaconda3/envs/competition/lib/python3.10/site-packages/torch/lib/
 """

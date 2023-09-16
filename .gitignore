@@ -19,3 +19,4 @@ real_reg/
 huggingface/*
 bench_samples_standard/*
 bench_samples/*
+project/

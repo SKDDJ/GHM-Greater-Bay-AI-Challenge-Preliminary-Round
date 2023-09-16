@@ -271,16 +271,21 @@ def main(argv=None):
     config = get_config()
     args = get_args()
     config.output_path = args.output_path
-    config.nnet_path = os.path.join(args.restore_path, "final.ckpt",'nnet.pth')
+    # config.nnet_path = os.path.join(args.restore_path, "final.ckpt",'nnet.pth')
+    config.lora_path = os.path.join(args.restore_path, "lora.pt.tmp",'lora.pt')
     config.n_samples = 3
     config.n_iter = 1
     device = "cuda"
 
     # init models
     nnet = UViT(**config.nnet)
-    print(f'load nnet from {config.nnet_path}')
+    print(f'load nnet from {config.lora_path}')
+    
+    nnet.load_state_dict(torch.load("models/uvit_v1.pth", map_location='cpu'), False)
+
     nnet = get_peft_model(nnet,lora_config)
-    nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'), True)
+    # nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),True)
+    nnet.load_state_dict(torch.load(config.lora_path, map_location='cpu'), False)
     autoencoder = libs.autoencoder.get_model(**config.autoencoder)
     clip_text_model = FrozenCLIPEmbedder(version=config.clip_text_model, device=device)
     clip_text_model.load_textual_inversion(args.weight_dir, token = "<new1>" , weight_name="<new1>.bin")
@@ -294,6 +299,7 @@ def main(argv=None):
     total_diff_parameters = 0
     
     nnet_standard = UViT(**config.nnet)
+    # nnet_standard = get_peft_model(nnet_standard,lora_config)
     nnet_standard.load_state_dict(torch.load("models/uvit_v1.pth", map_location='cpu'), False)
     nnet_standard = get_peft_model(nnet_standard,lora_config)
     total_diff_parameters += compare_model(nnet_standard, nnet, nnet_mapping_dict)
@@ -307,7 +313,6 @@ def main(argv=None):
     total_diff_parameters += compare_model(clip_text_strandard, clip_text_model, clip_text_mapping_dict)
     del clip_text_strandard
     
-
     clip_text_model.to(device)
     autoencoder.to(device)
     nnet.to(device)

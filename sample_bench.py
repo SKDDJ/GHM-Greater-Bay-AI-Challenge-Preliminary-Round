@@ -359,7 +359,6 @@ def main(argv=None):
     # init models
     nnet = UViT(**config.nnet)
     
-    Lora = True
     print(config.nnet_path)
     print(f'load nnet from {config.nnet_path}')
     nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),False)
