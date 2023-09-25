@@ -55,6 +55,10 @@ class lora_cross_attention_ttoi(nn.Module):
         nn.init.zeros_(self.to_k.weight)
         nn.init.zeros_(self.to_v.weight)
         nn.init.zeros_(self.to_out.weight)
+        nn.init.constant_(self.to_q.bias, 0)
+        nn.init.constant_(self.to_k.bias, 0)
+        nn.init.constant_(self.to_v.bias, 0)
+        nn.init.constant_(self.to_out.bias, 0) 
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
         batch_size, seq_len, dim = tensor.shape
@@ -186,7 +190,10 @@ class lora_cross_attention_itot(nn.Module):
         nn.init.zeros_(self.to_k.weight)
         nn.init.zeros_(self.to_v.weight)
         nn.init.zeros_(self.to_out.weight)
-        
+        nn.init.constant_(self.to_q.bias, 0)
+        nn.init.constant_(self.to_k.bias, 0)
+        nn.init.constant_(self.to_v.bias, 0)
+        nn.init.constant_(self.to_out.bias, 0) 
     def head_to_batch_dim(self, tensor, out_dim=3):
         head_size = self.heads
         batch_size, seq_len, dim = tensor.shape
@@ -680,11 +687,11 @@ class UViT(nn.Module):
                 y = blk.skip_linear(torch.cat([y, skip], dim=-1))
                 y = blk.norm1(y)
                 t_img_token, t_text_token, token_embed, text, clip_img, img = y.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
-                modelttoi = self.adapters_ttoi[count]  
+                modelttoi = self.adapters_ttoi[count]
                 modelitot = self.adapters_itot[count]
                 modelttoi.to('cuda')
                 modelitot.to('cuda')
-                lora_img = modelttoi(img,init_text)  
+                lora_img = modelttoi(img,init_text)
                 lora_text = modelitot(img,init_text)
                 del y         
                 x = blk(x, skip, lora_input_img = lora_img,lora_input_text = lora_text)    

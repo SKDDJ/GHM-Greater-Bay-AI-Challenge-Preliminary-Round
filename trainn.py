@@ -52,6 +52,9 @@ import itertools
 import json
 #from pathos.multiprocessing import ProcessingPool as Pool
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
+
+os.environ['CUDA_VISIBLE_DEVICES']="1, 2"
+
 lora_config = LoraConfig(
     inference_mode=False,
     lora_alpha=16,
@@ -382,9 +385,9 @@ def train(config):
         # bloss.requires_grad = True
         
         accelerator.backward(bloss)
-        for name, param in nnet.named_parameters():
-            if param.grad is not None:
-                print(name)
+        # for name, param in nnet.named_parameters():
+        #     if param.grad is not None:
+        #         print(name)
     
         
 
@@ -481,10 +484,10 @@ def train(config):
                 #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                 #     save_step += config.save_interval
                    
-                if total_step >= 50:
+                if total_step >= 800:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
-                    train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
                     train_state.save_lora(os.path.join(config.outdir, 'lora.pt.tmp'))
                     break
 
@@ -646,14 +649,15 @@ if __name__ == "__main__":
 
 
 """ 
-accelerate launch trainn.py \
+nohup accelerate launch trainn.py \
   --instance_data_dir="train_data/newboy1" \
   --outdir="model_output/boy1"\
   --class_data_dir="real_reg/samples_boyface" \
   --with_prior_preservation  --prior_loss_weight=1.0 \
   --class_prompt="boy" --num_class_images=200 \
   --instance_prompt=" a <new1> boy"  \
-  --modifier_token "<new1>"
+  --modifier_token "<new1>"\
+  > output.log 2>&1 &
   
   export LD_LIBRARY_PATH=/home/shiyiming/anaconda3/envs/competition/lib/python3.10/site-packages/torch/lib/
 """

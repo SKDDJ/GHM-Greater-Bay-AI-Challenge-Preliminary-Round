@@ -52,14 +52,6 @@ import itertools
 import json
 #from pathos.multiprocessing import ProcessingPool as Pool
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
-lora_config = LoraConfig(
-    inference_mode=False,
-    lora_alpha=16,
-    lora_dropout=0.1,
-    r=24,
-    bias="none",
-    # target_modules=["qkv","proj"],
-)
 
 
 # 保存text encoder中新增token的embedding
@@ -242,7 +234,7 @@ def train(config):
 
     clip_img_model, clip_img_model_preprocess = clip.load(config.clip_img_model, jit=False)
     # clip_img_model.to(device).eval().requires_grad_(False)
-    clip_img_model.to(device).requires_grad_(False)
+    clip_img_model.to(device).requires_grad_(True)
     
     # Adding a modifier token which is optimized #### 来自Textual inversion代码
     # Code taken from https://github.com/huggingface/diffusers/blob/main/examples/textual_inversion/textual_inversion.py
@@ -373,17 +365,19 @@ def train(config):
         # with torch.no_grad():
         z = autoencoder.encode(img)
         clip_img = clip_img_model.encode_image(img4clip).unsqueeze(1).contiguous()
+
         text = text_encoder(text)[0]
         text = caption_decoder.encode_prefix(text)
         #z= false text = true
+
        
         bloss = LSimple_T2I(img=z,clip_img=clip_img, text=text, data_type=data_type, nnet=nnet, schedule=schedule, device=device, config=config,mask=mask)
         # bloss.requires_grad = True
         
         accelerator.backward(bloss)
-        for name, param in nnet.named_parameters():
-            if param.grad is not None:
-                print(name)
+        # for name, param in nnet.named_parameters():
+        #     if param.grad is not None:
+        #         print(name)
     
         
 
@@ -459,11 +453,11 @@ def train(config):
                 metrics = train_step()
             print("metrics",metrics)
             count+=1
-         
+           
             accelerator.wait_for_everyone()
-            if count == 2:
-                exit()
+            
             if accelerator.is_main_process:
+       
                 # nnet.eval()
                 total_step = train_state.step * config.batch_size
                 if total_step >= log_step:
@@ -471,7 +465,24 @@ def train(config):
                #     wandb.log(utils.add_prefix(metrics, 'train'), step=total_step)
                     # train_state.save(os.path.join(config.log_dir, f'{total_step:04}.ckpt'))
                     log_step += config.log_interval
+                if total_step == 1200:
+                    logging.info(f"saving final ckpts to {config.outdir}1200...")
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_1200")
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    train_state.save_lora(os.path.join(config.outdir + "_1200", 'lora.pt.tmp'))
+                    
+                if total_step == 2400:
+                    logging.info(f"saving final ckpts to {config.outdir}2400...")
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_2400")
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    train_state.save_lora(os.path.join(config.outdir + "_2400", 'lora.pt.tmp'))
 
+                if total_step == 3000:
+                    logging.info(f"saving final ckpts to {config.outdir}3000...")
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_3000")
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    train_state.save_lora(os.path.join(config.outdir + "_3000", 'lora.pt.tmp')) 
+                    break
                 # if total_step >= eval_step:
                 #     eval(total_step)
                 #     eval_step += config.eval_interval
@@ -481,13 +492,12 @@ def train(config):
                 #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
                 #     save_step += config.save_interval
 
-                if total_step >= 600:
+                if total_step >= 800:
                     logging.info(f"saving final ckpts to {config.outdir}...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
-                    train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
                     train_state.save_lora(os.path.join(config.outdir, 'lora.pt.tmp'))
                     break
-
 
     loop()
 

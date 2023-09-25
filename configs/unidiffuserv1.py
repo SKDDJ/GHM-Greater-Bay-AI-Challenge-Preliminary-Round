@@ -65,9 +65,14 @@ def get_config():
 
     config.lr_scheduler = d(
         name='customized',
-        warmup_steps=5
+        warmup_steps=0
     )
 
+    # config.lr_scheduler = d(
+    #     name='cosine',
+      
+    # )
+    
     config.autoencoder = d(
         pretrained_path='models/autoencoder_kl.pth',
     )

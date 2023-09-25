@@ -20,3 +20,12 @@ huggingface/*
 bench_samples_standard/*
 bench_samples/*
 project/
+
+xiugou.tar
+
+xiugo_submit.tar.gz
+
+clip_img.pt
+img.pt
+
+project.zip

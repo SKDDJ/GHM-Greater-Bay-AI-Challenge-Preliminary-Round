@@ -55,7 +55,7 @@ def collate_fn(examples, with_prior_preservation=False):
     input_ids = torch.cat(input_ids, dim=0)
     mask = mask.unsqueeze(1)
     
-    
+
     # if has_attention_mask:
     #     attention_mask = torch.cat(attention_mask, dim=0)
     #     batch["attention_mask"] = attention_mask
@@ -127,6 +127,11 @@ class PersonalizedBase(Dataset):
             inst_img_path = [
                 (x, concept["instance_prompt"]) for x in Path(concept["instance_data_dir"]).iterdir() if x.is_file()
             ]
+            for i in range(len(inst_img_path)):
+                path, text = inst_img_path[i]
+                if str(path).endswith('.jpg'):
+                    inst_img_path[i] = (path, 'photo of a <new1> girl')
+           
             self.instance_images_path.extend(inst_img_path)
 
             class_data_root = Path(concept["class_data_dir"])
@@ -198,9 +203,9 @@ class PersonalizedBase(Dataset):
     def __getitem__(self, index):
         example = {}
         instance_image, instance_prompt = self.instance_images_path[index % self.num_instance_images]
-    
-        instance_image = Image.open(instance_image)
         
+        instance_image = Image.open(instance_image)
+    
         if not instance_image.mode == "RGB":
             instance_image = instance_image.convert("RGB")
         example["instance_clip_images"] = self.transform_clip(instance_image)
@@ -249,7 +254,8 @@ class PersonalizedBase(Dataset):
             class_image = class_image.convert("RGB")
         example["class_images"] = self.image_transforms(class_image)
         example["class_mask"] = torch.ones_like(example["mask"])
-
+       
+       
         example["class_prompt_ids"] = self.tokenizer(
             class_prompt,
             truncation=True,

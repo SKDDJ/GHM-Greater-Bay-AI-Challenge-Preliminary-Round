@@ -28,10 +28,15 @@ import numpy as np
 import json
 from libs.uvit_multi_post_ln_v1 import UViT
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
+# lora_config = LoraConfig(
+#    inference_mode=False, r=128, lora_alpha=64, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+# )
 lora_config = LoraConfig(
    inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
 )
-
+# lora_config = LoraConfig(
+#    inference_mode=False, r=96, lora_alpha=48, lora_dropout=0.1,target_modules=["qkv","to_q","to_k","to_v","clip_img_embed"]
+# )
 
 def get_model_size(model):
     """
@@ -170,6 +175,16 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
     def sample_fn(**kwargs):
         _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
         _clip_img_init = torch.randn(_n_samples, 1, config.clip_img_dim, device=device)
+      
+
+
+        # _z_init =  torch.load('img.pt')
+        # # _clip_img_init = torch.load('clip_img.pt')
+        # _z_init = _z_init[1]
+        # # _clip_img_init = _clip_img_init[1]
+        # _z_init = torch.stack([_z_init]*3)
+        # # _clip_img_init = torch.stack([_clip_img_init]*3)
+
         _x_init = combine(_z_init, _clip_img_init)
 
         noise_schedule = NoiseScheduleVP(schedule='discrete', betas=torch.tensor(_betas, device=device).float())
@@ -288,7 +303,7 @@ def main(argv=None):
     nnet.load_state_dict(torch.load(config.lora_path, map_location='cpu'), False)
     autoencoder = libs.autoencoder.get_model(**config.autoencoder)
     clip_text_model = FrozenCLIPEmbedder(version=config.clip_text_model, device=device)
-    clip_text_model.load_textual_inversion(args.weight_dir, token = "<new1>" , weight_name="<new1>.bin")
+    # clip_text_model.load_textual_inversion(args.restore_path, token = "<new1>" , weight_name="<new1>.bin")
     clip_text_model.to("cpu")
     
     
@@ -304,7 +319,9 @@ def main(argv=None):
     nnet_standard = get_peft_model(nnet_standard,lora_config)
     total_diff_parameters += compare_model(nnet_standard, nnet, nnet_mapping_dict)
     del nnet_standard
-    
+
+#    print(f"\033[91m this is the diff between uvit: {total_diff_parameters}\033[00m")
+#  this is the diff between uvit: 192137216
     autoencoder_standard = libs.autoencoder.get_model(**config.autoencoder)
     total_diff_parameters += compare_model(autoencoder_standard, autoencoder, autoencoder_mapping_dict)
     del autoencoder_standard
@@ -313,6 +330,7 @@ def main(argv=None):
     total_diff_parameters += compare_model(clip_text_strandard, clip_text_model, clip_text_mapping_dict)
     del clip_text_strandard
     
+    clip_text_model.load_textual_inversion(args.restore_path, token = "<new1>" , weight_name="<new1>.bin")
     clip_text_model.to(device)
     autoencoder.to(device)
     nnet.to(device)
@@ -331,6 +349,6 @@ def main(argv=None):
         sample(prompt_index, config, nnet, clip_text_model, autoencoder, device)
         
     print(f"\033[91m finetuned parameters: {total_diff_parameters}\033[00m")
-
+#  finetuned parameters: 268028672
 if __name__ == "__main__":
     main()

@@ -1,0 +1,20 @@
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: 当前文件",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": ["--hello", "hello world"],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}
+
+
+// accelerate launch --mixed_precision no --num_processes 1 trainn.py --instance_data_dir="train_data/newboy1"  --outdir="model_output/boy1"  --class_data_dir="real_reg/samples_boyface"   --with_prior_preservation  --prior_loss_weight=1.0  --class_prompt="boy" --num_class_images=200  --instance_prompt=" a <new1> boy"  --modifier_token "<new1>"

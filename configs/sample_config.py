@@ -30,9 +30,9 @@ def get_config():
     config.resolution = 512
     
     config.clip_img_model = "ViT-B/32"
-    # config.clip_text_model = "/home/wuyujia/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
-    config.clip_text_model = "huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
+    config.clip_text_model = "/home/wuyujia/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
     
+    # config.clip_text_model ="openai/clip-vit-large-patch14"
     config.only_load_model = True
     
 
