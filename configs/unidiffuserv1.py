@@ -65,7 +65,7 @@ def get_config():
 
     config.lr_scheduler = d(
         name='customized',
-        warmup_steps=0
+        warmup_steps=20
     )
 
     # config.lr_scheduler = d(

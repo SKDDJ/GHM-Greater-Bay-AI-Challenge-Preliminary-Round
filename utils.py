@@ -11,12 +11,12 @@ from libs.clip import FrozenCLIPEmbedder
 import itertools
 from libs.clip import CLIPEmbedder
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
-# lora_config = LoraConfig(
-#    inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
-# )
 lora_config = LoraConfig(
-   inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","text_embed","clip_img_embed"]
+   inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
 )
+# lora_config = LoraConfig(
+#    inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","text_embed","clip_img_embed"]
+# )
 # lora_config = LoraConfig(
 #    inference_mode=False, r=128, lora_alpha=64, lora_dropout=0.1,target_modules=["qkv","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
 # )#94,838,784

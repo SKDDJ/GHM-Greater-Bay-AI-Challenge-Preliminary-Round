@@ -156,7 +156,7 @@ def score(dataset_base, prompts_base, outputs_base):
     for taskname in SIM_TASKNAMES + EDIT_TASKNAMES:
         task_prompt = os.path.join(prompts_base, f'{taskname}.json')
         assert os.path.exists(task_prompt), f"Missing Prompt file: {task_prompt}"
-        task_output = os.path.join(outputs_base, f'{taskname}')
+        task_output = os.path.join(outputs_base, f'{taskname}_600')
         assert os.path.exists(task_output), f"Missing Output folder: {task_output}"
         
     def score_task(sample_folder, dataset_folder, prompt_json):
@@ -211,7 +211,7 @@ def score(dataset_base, prompts_base, outputs_base):
     for dataname, taskname in zip(DATANAMES, SIM_TASKNAMES):
         task_dataset = os.path.join(dataset_base, f'{dataname}')
         task_prompt = os.path.join(prompts_base, f'{taskname}.json')
-        task_output = os.path.join(outputs_base, f'{taskname}')
+        task_output = os.path.join(outputs_base, f'{taskname}_600')
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
         sim_scores.append(score)
@@ -223,7 +223,7 @@ def score(dataset_base, prompts_base, outputs_base):
         task_dataset = os.path.join(dataset_base, f'{dataname}')
         task_prompt = os.path.join(prompts_base, f'{taskname}.json')
         print(taskname,"taskname")
-        task_output = os.path.join(outputs_base, f'{taskname}')
+        task_output = os.path.join(outputs_base, f'{taskname}_600')
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
         edit_scores.append(score)

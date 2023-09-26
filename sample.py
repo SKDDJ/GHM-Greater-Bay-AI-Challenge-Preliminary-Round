@@ -329,7 +329,7 @@ def main(argv=None):
     clip_text_strandard = FrozenCLIPEmbedder(version=config.clip_text_model, device=device).to("cpu")
     total_diff_parameters += compare_model(clip_text_strandard, clip_text_model, clip_text_mapping_dict)
     del clip_text_strandard
-    
+  
     clip_text_model.load_textual_inversion(args.restore_path, token = "<new1>" , weight_name="<new1>.bin")
     clip_text_model.to(device)
     autoencoder.to(device)
@@ -344,7 +344,7 @@ def main(argv=None):
         else:
             prompt = prompt.replace("girl", "<new1> girl")
 
-        config.prompt = prompt
+        config.prompt = prompt 
         print("sampling with prompt:", prompt)
         sample(prompt_index, config, nnet, clip_text_model, autoencoder, device)
         
