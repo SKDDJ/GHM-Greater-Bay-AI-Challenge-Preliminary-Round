@@ -656,7 +656,8 @@ class UViT(nn.Module):
 
         x = x + pos_embed
         x = self.pos_drop(x)
-      
+        t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)    
+        init_text = text
         skips = []
         count = 0
         for blk in self.in_blocks:
@@ -667,8 +668,8 @@ class UViT(nn.Module):
                 modelttoi.to('cuda')
                 modelitot.to('cuda')
             
-                lora_img = modelttoi(img,text)  
-                lora_text = modelitot(img,text)
+                lora_img = modelttoi(img,init_text)  
+                lora_text = modelitot(img,init_text)
                 x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)            
                 x = blk(x, skip = None, lora_input_img = lora_img,lora_input_text = lora_text)    
                 count += 1           
@@ -690,8 +691,8 @@ class UViT(nn.Module):
                 modelitot = self.adapters_itot[count]
                 modelttoi.to('cuda')
                 modelitot.to('cuda')
-                lora_img = modelttoi(img,text)
-                lora_text = modelitot(img,text)
+                lora_img = modelttoi(img,init_text)
+                lora_text = modelitot(img,init_text)
                 del y         
                 x = blk(x, skip, lora_input_img = lora_img,lora_input_text = lora_text)    
                 count += 1

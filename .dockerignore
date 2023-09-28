@@ -10,29 +10,4 @@ train_data/girl2_0/
 
 project.zip
 
-
-outputs/boy1/
-outputs/boy2
-outputs/boy2_lora/
-outputs/girl1/
-outputs/girl1_lora/
-outputs/girl2/
-outputs/girl2_edit/
-outputs/girl2_new_800/
-outputs/girl2_new_1200/
-outputs/girl2_new_1400/
-outputs/girl2_new_1600/
-outputs/girl2_new_3000/
-outputs/girl2_ttoi/
-outputs/test/
-outputs/without_P/
-
-
-model_output/girl2_new_800/
-model_output/girl2_new_1200/
-model_output/girl2_new_1400/
-model_output/girl2_new_1600/
-model_output/girl2_new_2000/
-model_output/girl2_new_2400/
-model_output/girl2_new_3000/
-model_output/girl2_ttoi
+outputs/*

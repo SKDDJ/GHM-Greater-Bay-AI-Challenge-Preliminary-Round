@@ -173,17 +173,26 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
 
 
     def sample_fn(**kwargs):
-        _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
+        # _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
         _clip_img_init = torch.randn(_n_samples, 1, config.clip_img_dim, device=device)
+        
+        if 'girl1' in config.lora_path:
+             _z_init = torch.load('girl1_img.pt')
+        elif 'girl2' in config.lora_path:
+             _z_init = torch.load('girl2_img.pt')
+            
+        elif 'boy1' in config.lora_path:
+             _z_init = torch.load('boy1_img.pt')
+        elif 'boy2' in config.lora_path:
+             _z_init = torch.load('boy2_img.pt')
+        else:
+            exit()
+
+        
+        _z_init = _z_init[0]
+  
+        _z_init = torch.stack([_z_init]*config.n_samples)
       
-
-
-        # _z_init =  torch.load('img.pt')
-        # # _clip_img_init = torch.load('clip_img.pt')
-        # _z_init = _z_init[1]
-        # # _clip_img_init = _clip_img_init[1]
-        # _z_init = torch.stack([_z_init]*3)
-        # # _clip_img_init = torch.stack([_clip_img_init]*3)
 
         _x_init = combine(_z_init, _clip_img_init)
 
@@ -343,6 +352,8 @@ def main(argv=None):
             prompt = prompt.replace("boy", "<new1> boy")
         else:
             prompt = prompt.replace("girl", "<new1> girl")
+        if "closer" in prompt:
+            prompt = config.closerprompt
 
         config.prompt = prompt 
         print("sampling with prompt:", prompt)
