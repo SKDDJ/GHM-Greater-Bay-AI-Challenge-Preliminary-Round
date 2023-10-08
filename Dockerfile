@@ -1,20 +1,16 @@
-FROM skddj/xiugo:v1
+FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
 
 WORKDIR /workspace
 
-ENV CONDA_DEFAULT_ENV=uni
+RUN apt update && apt upgrade -y
+RUN apt install -y git libgl1-mesa-glx libglib2.0-0
+RUN apt-get install -y gcc g++
 
-COPY indocker_shell.sh ./indocker_shell.sh 
+## dependency installation
+COPY ./CLIP ./CLIP
+COPY ./requirements.txt ./requirements.txt
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple 
+RUN pip install -r ./requirements.txt
 
-COPY sample.sh ./sample.sh 
+COPY . .
 
-COPY score.py ./score.py
- 
-
-COPY . . 
-
-CMD ["/bin/bash"] 
-
-# ENTRYPOINT ["/bin/bash", "-c", "conda activate uni"]
-
-RUN echo "chmod -R 777 /workspace/indocker_shell.sh" >> /root/.bashrc

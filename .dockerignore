@@ -1,13 +1,5 @@
 models/*
 
-CLIP/
-
-train_data/boy1/
-train_data/boy2/
-train_data/girl1/
-train_data/girl2/
-train_data/girl2_0/
-
 project.zip
 
 outputs/*
