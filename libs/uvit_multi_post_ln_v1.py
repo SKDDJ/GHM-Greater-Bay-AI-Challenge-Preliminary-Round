@@ -591,13 +591,13 @@ class UViT(nn.Module):
         trunc_normal_(self.pos_embed, std=.02)
         self.apply(self._init_weights)
       
-        self.adapters_itot = nn.ModuleList()
-        for _ in range(30):
-            self.adapters_itot.append(lora_cross_attention_itot())
+        # self.adapters_itot = nn.ModuleList()
+        # for _ in range(30):
+        #     self.adapters_itot.append(lora_cross_attention_itot())
         
-        self.adapters_ttoi = nn.ModuleList()
-        for _ in range(30):
-            self.adapters_ttoi.append(lora_cross_attention_ttoi())
+        # self.adapters_ttoi = nn.ModuleList()
+        # for _ in range(30):
+        #     self.adapters_ttoi.append(lora_cross_attention_ttoi())
         
         # print("lora_attention",self.in_blocks[0].lora_attention.to_q.up.weight)
         # exit()
@@ -661,7 +661,7 @@ class UViT(nn.Module):
         skips = []
         count = 0
         for blk in self.in_blocks:
-            if not hasattr(self, 'Lora'):
+            if hasattr(self, 'Lora'):
                 t_img_token, t_text_token, token_embed, text, clip_img, img = x.split((1, 1, 1, num_text_tokens, 1, num_img_tokens), dim=1)                
                 modelttoi = self.adapters_ttoi[count]  
                 modelitot = self.adapters_itot[count]
@@ -669,7 +669,7 @@ class UViT(nn.Module):
                 modelitot.to('cuda')
             
                 lora_img = modelttoi(img,init_text)  
-                lora_text = modelitot(img,init_text)
+                lora_text = modelitot(img,text)
                 x = torch.cat((t_img_token, t_text_token, token_embed, text, clip_img, img), dim=1)            
                 x = blk(x, skip = None, lora_input_img = lora_img,lora_input_text = lora_text)    
                 count += 1           
@@ -681,7 +681,7 @@ class UViT(nn.Module):
         x = self.mid_block(x)
 
         for blk in self.out_blocks:
-            if not hasattr(self, 'Lora'):
+            if hasattr(self, 'Lora'):
                 skip = skips.pop()
                 y = x
                 y = blk.skip_linear(torch.cat([y, skip], dim=-1))
@@ -692,7 +692,7 @@ class UViT(nn.Module):
                 modelttoi.to('cuda')
                 modelitot.to('cuda')
                 lora_img = modelttoi(img,init_text)
-                lora_text = modelitot(img,init_text)
+                lora_text = modelitot(img,text)
                 del y         
                 x = blk(x, skip, lora_input_img = lora_img,lora_input_text = lora_text)    
                 count += 1

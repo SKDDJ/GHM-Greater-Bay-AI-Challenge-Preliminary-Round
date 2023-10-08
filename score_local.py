@@ -103,6 +103,7 @@ class Evaluator():
     
     def sim_clip_imgembs(self, img, embs):
         feat = self.get_img_embedding(img)
+
         similarity = feat @ embs.T
         return max(0,similarity.max().item())
         
@@ -146,7 +147,9 @@ def score(dataset_base, prompts_base, outputs_base):
     DATANAMES = ["boy1", "boy2", "girl1", "girl2"]
     SIM_TASKNAMES = ['boy1_sim', 'boy2_sim', 'girl1_sim', 'girl2_sim']
     EDIT_TASKNAMES = ['boy1_edit', 'boy2_edit', 'girl1_edit', 'girl2_edit']
-    
+    # DATANAMES = ["girl1"]
+    # SIM_TASKNAMES = ["girl1_sim"]
+    # EDIT_TASKNAMES = ["girl1_edit"]
     ## folder check
     for taskname in DATANAMES:
         task_dataset = os.path.join(dataset_base, f'{taskname}')
@@ -178,20 +181,27 @@ def score(dataset_base, prompts_base, outputs_base):
         
         pompt_scores = []
         prompts = json.load(open(prompt_json, "r"))
+    
         for prompt_index, prompt in enumerate(prompts):
             sample_scores = []
             for idx in range(0,3): ## 3 generation for each prompt
                 sample_path = os.path.join(sample_folder,f"{prompt_index}-{idx:03}.jpg") ## for face / target reference
                 try:
                     sample = read_img_pil(sample_path)
+                 
                     # sample vs ref
                     score_face = eval.sim_face_emb(sample, refs_embs)
+                    
+                 
                     score_clip = eval.sim_clip_imgembs(sample, refs_clip)
                     # sample vs prompt
                     score_text = eval.sim_clip_text(sample, prompt)
+
+                    print(f'sample_path:{sample_path},score_clip:{score_clip},score_face:{score_face}')
                     sample_score = [score_face, score_clip, score_text]
                 except Exception as e:
                     #### print(e)
+                
                     sample_score = [0.0, 0.0, 0.0]
                 #### print(f"Score for sample {idx}: ", sample_score)
                 sample_scores.append(sample_score)
@@ -217,6 +227,7 @@ def score(dataset_base, prompts_base, outputs_base):
     for dataname, taskname in zip(DATANAMES, EDIT_TASKNAMES):
         task_dataset = os.path.join(dataset_base, f'{dataname}')
         task_prompt = os.path.join(prompts_base, f'{taskname}.json')
+        print(taskname,"taskname")
         task_output = os.path.join(outputs_base, f'{taskname}')
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
@@ -239,12 +250,12 @@ def score(dataset_base, prompts_base, outputs_base):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluation Script')
     parser.add_argument('--dataset', type=str, default='./train_data/', help='dataset folder')
-    parser.add_argument('--prompts', type=str, default='./eval_prompts_advance/', help='prompt folder')
+    parser.add_argument('--prompts', type=str, default='./eval_prompts/', help='prompt folder')
     parser.add_argument('--outputs', type=str, default='./outputs/', help='output folder')
 
     args = parser.parse_args()
     
     eval_score = score(args.dataset, args.prompts, args.outputs)
-    print(eval_score)
+
     
     

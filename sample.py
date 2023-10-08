@@ -29,10 +29,10 @@ import json
 from libs.uvit_multi_post_ln_v1 import UViT
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
 # lora_config = LoraConfig(
-#    inference_mode=False, r=128, lora_alpha=64, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+#    inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
 # )
 lora_config = LoraConfig(
-   inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+   inference_mode=False, r=64, lora_alpha=32, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","text_embed","clip_img_embed"]
 )
 # lora_config = LoraConfig(
 #    inference_mode=False, r=96, lora_alpha=48, lora_dropout=0.1,target_modules=["qkv","to_q","to_k","to_v","clip_img_embed"]
@@ -178,21 +178,25 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
         
         if 'girl1' in config.lora_path:
              _z_init = torch.load('girl1_img.pt')
+             _z_init = _z_init[0]
         elif 'girl2' in config.lora_path:
              _z_init = torch.load('girl2_img.pt')
-            
+             _z_init = _z_init[0]
         elif 'boy1' in config.lora_path:
              _z_init = torch.load('boy1_img.pt')
+             _z_init = _z_init[0]
         elif 'boy2' in config.lora_path:
              _z_init = torch.load('boy2_img.pt')
+             _z_init = _z_init[0]
         else:
             exit()
 
+     
         
-        _z_init = _z_init[0]
-  
+        
         _z_init = torch.stack([_z_init]*config.n_samples)
-      
+    
+        # _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
 
         _x_init = combine(_z_init, _clip_img_init)
 
@@ -300,13 +304,15 @@ def main(argv=None):
     config.n_samples = 3
     config.n_iter = 1
     device = "cuda"
+ 
+
 
     # init models
     nnet = UViT(**config.nnet)
     print(f'load nnet from {config.lora_path}')
     
     nnet.load_state_dict(torch.load("models/uvit_v1.pth", map_location='cpu'), False)
-
+    
     nnet = get_peft_model(nnet,lora_config)
     # nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),True)
     nnet.load_state_dict(torch.load(config.lora_path, map_location='cpu'), False)

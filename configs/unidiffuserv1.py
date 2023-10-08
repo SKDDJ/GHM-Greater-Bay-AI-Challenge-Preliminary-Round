@@ -112,7 +112,7 @@ def get_config():
     config.sample = d(
         sample_steps=100, # 我从 30 调到了 100
         scale=7.,
-        t2i_cfg_mode='true_uncond' # 笑死，之前sample 中的也是用的是true_uncond模式，生成的图片能看才见鬼
+        t2i_cfg_mode='true_uncond' 
     )
 
     return config

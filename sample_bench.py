@@ -352,8 +352,8 @@ def main(argv=None):
     config.nnet_path = args.nnet_path
     config.output_path = args.output_path
 
-    config.n_samples = 2
-    config.n_iter = 15
+    config.n_samples = 8
+    config.n_iter = 1
     device = "cuda"
 
     # init models
@@ -363,6 +363,7 @@ def main(argv=None):
     print(f'load nnet from {config.nnet_path}')
     nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),False)
     nnet = get_peft_model(nnet,lora_config)
+    nnet.print_trainable_parameters()
     nnet.to(device)
     if args.half:
         nnet = nnet.half()
