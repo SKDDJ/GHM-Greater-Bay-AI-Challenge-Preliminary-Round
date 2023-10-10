@@ -11,7 +11,7 @@ def get_config():
 
     config.seed = 1234
     config.pred = 'noise_pred'
-    config.pretrained_path = "/home/shiyiming/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
+    config.pretrained_path = "/home/wuyujia/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
     config.z_shape = (4, 64, 64)
     config.clip_img_dim = 512
     config.clip_text_dim = 768
@@ -27,7 +27,7 @@ def get_config():
 
     
     config.max_step = 200
-    config.batch_size = 2
+    config.batch_size = 4
     
     config.center_crop = True
     config.real_prior = True
@@ -49,14 +49,14 @@ def get_config():
     
     config.clip_img_model = "ViT-B/32"
     # config.clip_text_model = "openai/clip-vit-large-patch14"
-    config.clip_text_model = "/home/schengwei/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
+    config.clip_text_model = "/home/wuyujia/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
     
     config.only_load_model = True
     
 
     config.optimizer = d(
         name='adamw',
-        lr=2e-05, # for custom diffusion, lr=5e-6, but in code is will double if with preservation is True.
+        lr = 4e-5, #4e-5
         weight_decay=0.01, # 0.03
         betas=(0.9, 0.999),# adam_beta2 changed from 0.9 to 0.999, same as Custom Diffusion.
         amsgrad=False,
@@ -70,7 +70,6 @@ def get_config():
 
     # config.lr_scheduler = d(
     #     name='cosine',
-      
     # )
     
     config.autoencoder = d(

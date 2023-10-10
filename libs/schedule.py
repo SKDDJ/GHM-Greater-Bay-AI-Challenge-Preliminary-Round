@@ -93,7 +93,8 @@ def LSimple_T2I(img, clip_img, text, data_type, nnet, schedule, device, config, 
     clip_img_n=clip_img_n.to(torch.float32)
     t_text=torch.zeros_like(n, device=device)
     data_type=torch.zeros_like(t_text, device=device, dtype=torch.int) + config.data_type
-    # torch.save(img_n, 'girl1_img_face.pt')
+    
+    # torch.save(img_n, 'girl2_img_face.pt')
     # exit()
     img_out, clip_img_out, text_out = nnet(img_n, clip_img_n, text, t_img=n, t_text=t_text, data_type=data_type)
     
@@ -110,7 +111,7 @@ def LSimple_T2I(img, clip_img, text, data_type, nnet, schedule, device, config, 
     loss_img_clip =  F.mse_loss(clip_img_out.float(), clip_img_eps.float(), reduction="mean")
     text_out = torch.nn.functional.softplus(text_out).mean()
     # lora_img_out = torch.nn.functional.softplus(lora_img_out).mean()
-    bloss =  1.2*aloss+  prior_loss +  loss_img_clip + 0. * text_out #+ 0. *lora_img_out
+    bloss =  1.2*aloss+ prior_loss +  loss_img_clip + 0. * text_out #+ 0. *lora_img_out
   
     return  bloss
 

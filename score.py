@@ -140,13 +140,14 @@ class Evaluator():
 def read_img_pil(p):
     return Image.open(p)
 
-def score(dataset_base, prompts_base, outputs_base):
+def score(dataset_base, prompts_base, outputs_base,i):
     eval = Evaluator()
-    
-    DATANAMES = ["boy1", "boy2", "girl1", "girl2"]
-    SIM_TASKNAMES = ['boy1_sim', 'boy2_sim', 'girl1_sim', 'girl2_sim']
-    EDIT_TASKNAMES = ['boy1_edit', 'boy2_edit', 'girl1_edit', 'girl2_edit']
-    
+    # DATANAMES = ["boy1", "boy2", "girl1", "girl2"]
+    # SIM_TASKNAMES = ['boy1_sim', 'boy2_sim', 'girl1_sim', 'girl2_sim']
+    # EDIT_TASKNAMES = ['boy1_edit', 'boy2_edit', 'girl1_edit', 'girl2_edit']
+    DATANAMES = ["girl2"]
+    SIM_TASKNAMES = ['girl2_sim']
+    EDIT_TASKNAMES = ['girl2_edit']
     ## folder check
     for taskname in DATANAMES:
         task_dataset = os.path.join(dataset_base, f'{taskname}')
@@ -154,7 +155,10 @@ def score(dataset_base, prompts_base, outputs_base):
     for taskname in SIM_TASKNAMES + EDIT_TASKNAMES:
         task_prompt = os.path.join(prompts_base, f'{taskname}.json')
         assert os.path.exists(task_prompt), f"Missing Prompt file: {task_prompt}"
-        task_output = os.path.join(outputs_base, f'{taskname}')
+        if i == -1:
+            task_output = os.path.join(outputs_base, f'{taskname}')
+        else:
+            task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
         assert os.path.exists(task_output), f"Missing Output folder: {task_output}"
         
     def score_task(sample_folder, dataset_folder, prompt_json):
@@ -171,8 +175,6 @@ def score(dataset_base, prompts_base, outputs_base):
         refs_embs = torch.cat(refs_embs)
         #### print(refs_embs.shape)
         
-        
-        
         #### print("Ref Count: ", len(refs_images))
         #### print("Emb: ", refs_embs.shape)
         
@@ -184,12 +186,14 @@ def score(dataset_base, prompts_base, outputs_base):
                 sample_path = os.path.join(sample_folder,f"{prompt_index}-{idx:03}.jpg") ## for face / target reference
                 try:
                     sample = read_img_pil(sample_path)
+                    
                     # sample vs ref
                     score_face = eval.sim_face_emb(sample, refs_embs)
                     score_clip = eval.sim_clip_imgembs(sample, refs_clip)
                     # sample vs prompt
                     score_text = eval.sim_clip_text(sample, prompt)
                     sample_score = [score_face, score_clip, score_text]
+                    print(sample_path,"score_face",score_face,"score_clip",score_clip)
                 except Exception as e:
                     #### print(e)
                     sample_score = [0.0, 0.0, 0.0]
@@ -206,7 +210,10 @@ def score(dataset_base, prompts_base, outputs_base):
     for dataname, taskname in zip(DATANAMES, SIM_TASKNAMES):
         task_dataset = os.path.join(dataset_base, f'{dataname}')
         task_prompt = os.path.join(prompts_base, f'{taskname}.json')
-        task_output = os.path.join(outputs_base, f'{taskname}')
+        if i == -1:
+            task_output = os.path.join(outputs_base, f'{taskname}')
+        else:
+            task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
         sim_scores.append(score)
@@ -216,8 +223,11 @@ def score(dataset_base, prompts_base, outputs_base):
     edit_scores = []
     for dataname, taskname in zip(DATANAMES, EDIT_TASKNAMES):
         task_dataset = os.path.join(dataset_base, f'{dataname}')
-        task_prompt = os.path.join(prompts_base, f'{taskname}.json')
-        task_output = os.path.join(outputs_base, f'{taskname}')
+        if i == -1:
+            task_output = os.path.join(outputs_base, f'{taskname}')
+        else:
+            task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
+        task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
         edit_scores.append(score)
@@ -239,12 +249,12 @@ def score(dataset_base, prompts_base, outputs_base):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluation Script')
     parser.add_argument('--dataset', type=str, default='./train_data/', help='dataset folder')
-    parser.add_argument('--prompts', type=str, default='./eval_prompts_advance/', help='prompt folder')
+    parser.add_argument('--prompts', type=str, default='./eval_prompts/', help='prompt folder')
     parser.add_argument('--outputs', type=str, default='./outputs/', help='output folder')
 
     args = parser.parse_args()
+    for i in range(0,5):
+        eval_score = score(args.dataset, args.prompts, args.outputs,i+1)
+        print(eval_score)
     
-    eval_score = score(args.dataset, args.prompts, args.outputs)
-    print(eval_score)
-    
-    
+    # eval_score = score(args.dataset, args.prompts, args.outputs,i=2)

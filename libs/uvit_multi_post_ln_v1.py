@@ -403,47 +403,47 @@ class Attention(nn.Module):
         x = self.proj_drop(x)
         return x
 
-class LoraAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.,rank = 24, network_alpha = None):
-        super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = qk_scale or head_dim ** -0.5
-        self.to_qkv_lora = LoRALinearLayer(dim , dim*3 ,rank ,network_alpha)
-        # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.to_out = LoRALinearLayer(dim, dim, rank, network_alpha)
-        self.proj_drop = nn.Dropout(proj_drop)
+# class LoraAttention(nn.Module):
+#     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0.,rank = 24, network_alpha = None):
+#         super().__init__()
+#         self.num_heads = num_heads
+#         head_dim = dim // num_heads
+#         self.scale = qk_scale or head_dim ** -0.5
+#         self.to_qkv_lora = LoRALinearLayer(dim , dim*3 ,rank ,network_alpha)
+#         # self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+#         self.attn_drop = nn.Dropout(attn_drop)
+#         self.to_out = LoRALinearLayer(dim, dim, rank, network_alpha)
+#         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x):
-        B, L, C = x.shape
-        qkv = self.to_qkv_lora(x)
+#     def forward(self, x):
+#         B, L, C = x.shape
+#         qkv = self.to_qkv_lora(x)
         
         
-        if ATTENTION_MODE == 'flash':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
-            x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
-            x = einops.rearrange(x, 'B H L D -> B L (H D)')
-        elif ATTENTION_MODE == 'xformers':
-            qkv = einops.rearrange(qkv, 'B L (K H D) -> K B L H D', K=3, H=self.num_heads)
-            q, k, v = qkv[0], qkv[1], qkv[2]  # B L H D
-            x = xformers.ops.memory_efficient_attention(q, k, v)
-            x = einops.rearrange(x, 'B L H D -> B L (H D)', H=self.num_heads)
-        elif ATTENTION_MODE == 'math':
-            with torch.amp.autocast(device_type='cuda', enabled=False):
-                qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
-                q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
-                attn = (q @ k.transpose(-2, -1)) * self.scale
-                attn = attn.softmax(dim=-1)
-                attn = self.attn_drop(attn)
-                x = (attn @ v).transpose(1, 2).reshape(B, L, C)
-        else:
-            raise NotImplemented
+#         if ATTENTION_MODE == 'flash':
+#             qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+#             q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+#             x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+#             x = einops.rearrange(x, 'B H L D -> B L (H D)')
+#         elif ATTENTION_MODE == 'xformers':
+#             qkv = einops.rearrange(qkv, 'B L (K H D) -> K B L H D', K=3, H=self.num_heads)
+#             q, k, v = qkv[0], qkv[1], qkv[2]  # B L H D
+#             x = xformers.ops.memory_efficient_attention(q, k, v)
+#             x = einops.rearrange(x, 'B L H D -> B L (H D)', H=self.num_heads)
+#         elif ATTENTION_MODE == 'math':
+#             with torch.amp.autocast(device_type='cuda', enabled=False):
+#                 qkv = einops.rearrange(qkv, 'B L (K H D) -> K B H L D', K=3, H=self.num_heads).float()
+#                 q, k, v = qkv[0], qkv[1], qkv[2]  # B H L D
+#                 attn = (q @ k.transpose(-2, -1)) * self.scale
+#                 attn = attn.softmax(dim=-1)
+#                 attn = self.attn_drop(attn)
+#                 x = (attn @ v).transpose(1, 2).reshape(B, L, C)
+#         else:
+#             raise NotImplemented
 
-        x = self.to_out(x)
-        x = self.proj_drop(x)
-        return x
+#         x = self.to_out(x)
+#         x = self.proj_drop(x)
+#         return x
     
 
 

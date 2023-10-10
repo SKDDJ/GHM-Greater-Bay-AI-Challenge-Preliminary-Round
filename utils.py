@@ -196,7 +196,6 @@ def initialize_train_state(config, device, uvit_class,text_encoder = None):
     # nnet.load_state_dict(torch.load('/home/wuyujia/competition/model_output/girl1_new_10000/lora.pt.tmp/lora.pt', map_location='cpu'), False)
     nnet.print_trainable_parameters()
     
-
     input_embed_params = list(text_encoder.get_input_embeddings().parameters())
     param_lists = input_embed_params + [param for name, param in nnet.named_parameters() if 'lora' in name]
     
