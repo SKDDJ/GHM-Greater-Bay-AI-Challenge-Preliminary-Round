@@ -107,7 +107,7 @@ class PersonalizedBase(Dataset):
                  tokenizer=None,
                  config = None,
                  hflip=False,
-                 aug=True,
+                 aug=False,
                  ):
         self.size = size
         self.mask_size = mask_size
@@ -127,10 +127,12 @@ class PersonalizedBase(Dataset):
             inst_img_path = [
                 (x, concept["instance_prompt"]) for x in Path(concept["instance_data_dir"]).iterdir() if x.is_file()
             ]
+            
+            # 替换 prompt 如果传入的图片有背景的话
             for i in range(len(inst_img_path)):
                 path, text = inst_img_path[i]
                 if str(path).endswith('.jepg'):
-                    inst_img_path[i] = (path, 'photo of a <new1> girl on the street')
+                    inst_img_path[i] = (path, 'a <new1> boy in the room')
            
             self.instance_images_path.extend(inst_img_path)
 
@@ -172,7 +174,7 @@ class PersonalizedBase(Dataset):
         return self._length
     
     def preprocess(self, image, scale, resample):
-        
+### 在这里强行加了一堆 64*64 的mask，动态的 mask 有点问题，不确定影响大不大        
         outer, inner = self.size, scale
         factor = self.size // self.mask_size
         if scale > self.size:
@@ -220,19 +222,17 @@ class PersonalizedBase(Dataset):
                 else np.random.randint(int(1.2 * self.size), int(1.4 * self.size))
             )
         
-        
-        
+        random_scale = self.size
         instance_image, mask = self.preprocess(instance_image, random_scale, self.interpolation)
         
-        if random_scale < 0.6 * self.size:
-            instance_prompt = np.random.choice(["a far away ", "very small "]) + instance_prompt
-        elif random_scale > self.size:
-            instance_prompt = np.random.choice(["zoomed in ", "close up "]) + instance_prompt
+        # if random_scale < 0.6 * self.size:
+        #     instance_prompt = np.random.choice(["a far away ", "very small "]) + instance_prompt
+        # elif random_scale > self.size:
+        #     instance_prompt = np.random.choice(["zoomed in ", "close up "]) + instance_prompt
         
         example["instance_images"] = torch.from_numpy(instance_image).permute(2, 0, 1)
         example["mask"] = torch.from_numpy(mask)
         #torch.Size([3, 512, 512]) torch.Size([64, 64])
-
         example["instance_prompt_ids"] = self.tokenizer(
             instance_prompt,
             truncation=True,
@@ -254,8 +254,6 @@ class PersonalizedBase(Dataset):
             class_image = class_image.convert("RGB")
         example["class_images"] = self.image_transforms(class_image)
         example["class_mask"] = torch.ones_like(example["mask"])
-       
-       
         example["class_prompt_ids"] = self.tokenizer(
             class_prompt,
             truncation=True,

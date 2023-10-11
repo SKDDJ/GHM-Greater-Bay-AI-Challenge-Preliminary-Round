@@ -25,11 +25,13 @@ from libs.clip import FrozenCLIPEmbedder
 import numpy as np
 from libs.uvit_multi_post_ln_v1 import UViT
 from libs.caption_decoder import CaptionDecoder
+
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
 lora_config = LoraConfig(
    r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
 #    target_modules=["qkv","fc1","fc2","proj"]
 )
+
 
 
 def stable_diffusion_beta_schedule(linear_start=0.00085, linear_end=0.0120, n_timestep=1000):

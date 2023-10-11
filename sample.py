@@ -126,6 +126,13 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
             config.sample.t2i_cfg_mode == 'empty_token': using the original cfg with the empty string
             config.sample.t2i_cfg_mode == 'true_uncond: using the unconditional model learned by our method
         3. return linear combination of conditional output and unconditional output
+<<<<<<< HEAD
+        
+        'empty_token' 模式：在这种模式下，使用原始配置和空字符串来生成图像。这意味着生成的图像不受与之相关的文本信息的约束，生成的结果更加自由和多样化。
+
+        'true_uncond' 模式：在这种模式下，使用通过我们方法学习到的无条件模型来生成图像。这意味着生成的图像不依赖于与之相关的文本信息，生成的结果更加无条件和独立。
+=======
+>>>>>>> origin/wuyujia
         """
         z, clip_img = split(x)
 
@@ -176,27 +183,25 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
         # _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
         _clip_img_init = torch.randn(_n_samples, 1, config.clip_img_dim, device=device)
         
-        if 'girl1' in config.lora_path:
-             _z_init = torch.load('girl1_img.pt')
-             _z_init = _z_init[0]
-        elif 'girl2' in config.lora_path:
-             _z_init = torch.load('girl2_img.pt')
-             _z_init = _z_init[0]
-        elif 'boy1' in config.lora_path:
-             _z_init = torch.load('boy1_img.pt')
-             _z_init = _z_init[0]
-        elif 'boy2' in config.lora_path:
-             _z_init = torch.load('boy2_img.pt')
-             _z_init = _z_init[0]
-        else:
-            exit()
-
-     
+        ###  在这里固定 img
         
+        # if 'girl1' in config.lora_path:
+        #      _z_init = torch.load('girl1_img.pt')
+        #      _z_init = _z_init[0]
+        # elif 'girl2' in config.lora_path:
+        #      _z_init = torch.load('girl2_img_face.pt')
+        #      _z_init = _z_init[0]
+        # elif 'boy1' in config.lora_path:
+        #      _z_init = torch.load('boy1_img.pt')
+        #      _z_init = _z_init[0]
+        # elif 'boy2' in config.lora_path:
+        #      _z_init = torch.load('boy2_img.pt')
+        #      _z_init = _z_init[0]
+        # else:
+        #     exit()
         
-        _z_init = torch.stack([_z_init]*config.n_samples)
+        # _z_init = torch.stack([_z_init]*config.n_samples)
     
-        # _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
 
         _x_init = combine(_z_init, _clip_img_init)
 
@@ -208,9 +213,13 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
 
         dpm_solver = DPM_Solver(model_fn, noise_schedule, predict_x0=True, thresholding=False)
         with torch.no_grad(), torch.autocast(device_type="cuda" if "cuda" in str(device) else "cpu"):
+            start_time = time.time()
             x = dpm_solver.sample(_x_init, steps=config.sample.sample_steps, eps=1. / N, T=1.)
+            end_time = time.time()
+            print(f'\ngenerate {_n_samples} samples with {config.sample.sample_steps} steps takes {end_time - start_time:.2f}s')
 
         _z, _clip_img = split(x)
+        # _z = _z_init
         return _z, _clip_img
 
 
@@ -229,6 +238,8 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
         save_image(sample, save_path)
         
     print(f'results are saved in {save_path}')
+    print(f'\nGPU memory usage: {torch.cuda.max_memory_reserved() / 1024 ** 3:.2f} GB')
+    print(f'\nresults are saved in {os.path.join(config.output_path)} :)')
 
 
 def compare_model(standard_model:torch.nn.Module, model:torch.nn.Module, mapping_dict= {}):
@@ -318,15 +329,18 @@ def main(argv=None):
     nnet.load_state_dict(torch.load(config.lora_path, map_location='cpu'), False)
     autoencoder = libs.autoencoder.get_model(**config.autoencoder)
     clip_text_model = FrozenCLIPEmbedder(version=config.clip_text_model, device=device)
-    # clip_text_model.load_textual_inversion(args.restore_path, token = "<new1>" , weight_name="<new1>.bin")
-    clip_text_model.to("cpu")
+    clip_text_model.to(device)
+    clip_text_model.load_textual_inversion(args.weight_dir, token = "<new1>" , weight_name="<new1>.bin")
+
     
     
     nnet_mapping_dict = {}
     autoencoder_mapping_dict = {}
     clip_text_mapping_dict = {}
     
+    print("####### evaluating changed paramters")
     total_diff_parameters = 0
+    print(">>> evaluating nnet changed paramters")
     
     nnet_standard = UViT(**config.nnet)
     # nnet_standard = get_peft_model(nnet_standard,lora_config)
