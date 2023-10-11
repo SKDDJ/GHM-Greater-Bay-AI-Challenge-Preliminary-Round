@@ -1,7 +1,7 @@
 workdir/
 data/
 models/
-logs/
+logs/*
 log*/
 *__pycache__
 model_output/*
@@ -15,7 +15,9 @@ train_data/*
 
 
 ## weights anf lib
-CLIP/*
+CLIP/
+!CLIP/.git/
+
 .cache/
 .insightface
 
@@ -23,4 +25,24 @@ train_data/
 
 real_reg/
 
-CLIP/
+huggingface/*
+bench_samples_standard/*
+bench_samples/*
+project/
+
+xiugou.tar
+xiugo_submit.tar
+
+xiugo_submit.tar.gz
+
+clip_img.pt
+img.pt
+
+project.zip
+
+train_data_crop/*
+
+nnet.pt
+
+
+other_models/stablediffusion/*

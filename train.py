@@ -159,9 +159,8 @@ def train(config):
                 concepts_list[i] = concept
                 accelerator.wait_for_everyone()
             
-    # pretrained_model_name_or_path = "/home/wuyujia/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/133a221b8aa7292a167afc5127cb63fb5005638b"
-    # pretrained_model_name_or_path = "huggingface"
-    pretrained_model_name_or_path = "/home/shiyiming/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
+    # pretrained_model_name_or_path = "/data/hdd3/schengwei/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
+    pretrained_model_name_or_path = "CompVis/stable-diffusion-v1-4"
     tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path,
             subfolder="tokenizer",
@@ -172,9 +171,6 @@ def train(config):
     text_encoder = text_encoder_cls.from_pretrained(
         pretrained_model_name_or_path, subfolder="text_encoder", revision=config.revision
     )
-    # text_encoder = CLIPTextModel.from_pretrained(
-    #     pretrained_model_name_or_path, subfolder="text_encoder", revision=config.revision
-    # )
     text_encoder.to(device)
     train_state = utils.initialize_train_state(config, device, uvit_class=UViT,text_encoder = text_encoder)
 
@@ -185,47 +181,9 @@ def train(config):
 
     nnet, optimizer = accelerator.prepare(train_state.nnet, train_state.optimizer)
     nnet.to(device)
-    # nnet = get_peft_model(nnet,lora_config)
-    # for i in range (15):
-    #         module = nnet.in_blocks[i].attn
-    #         module = inject_adapter_in_model(lora_config, module)
-    # module = nnet.mid_block
-    # module = inject_adapter_in_model(lora_config, module)
-    # for i in range (15):
-    #         module = nnet.out_blocks[i].attn
-    #         module = inject_adapter_in_model(lora_config, module)
-    # print("success_add_lora")       
-    # 全参微调不加lora
-    # for name,param in nnet.named_parameters():
-    #     param.requires_grad=True
-    # for name,param in nnet.named_parameters():
-    #      if 'lora_adapters_ttoi' in name or 'lora_adapters_itot'  in name:
-    #         param.requires_grad = False  
-    
+
     
 
-    # # 非Lora部分不计算梯度
-    # for name,param in nnet.named_parameters():
-    #     if 'lora_attention' in name or 'token_embedding' in name:
-    #         param.requires_grad = True
-    #     else:
-    #         param.requires_grad=False
-
-    # for name,param in nnet.named_parameters():
-    #     if 'lora' in name or 'token_embedding' in name:
-    #         param.requires_grad = True
-    #     else:
-    #         param.requires_grad=False
-
-    # for name,param in nnet.named_parameters():
-    #     if 'lora_attention' in name or 'token_embedding' in name or 'lora_adapters_ttoi' in name or 'lora_adapters_itot' in name:
-    #         param.requires_grad = True
-    #     else:
-    #         param.requires_grad=False
-            
-    # check the nnet's parameters if they are frozen
-    # for name, param in nnet.named_parameters():
-    #     print(f'{name}: requires_grad={param.requires_grad}') 
     
     lr_scheduler = train_state.lr_scheduler
 
@@ -324,7 +282,7 @@ def train(config):
                                      mask_size= 64 #custom_diffusion里mask_size的值为64
                                     )
     train_dataset_loader = DataLoader(train_dataset,
-                                      batch_size=2,
+                                      batch_size=4,
                                       shuffle=True,
                                       collate_fn=lambda examples: collate_fn(examples, args.with_prior_preservation),
                                       num_workers=0,
@@ -334,6 +292,7 @@ def train(config):
 
     logging.info("saving meta data")
     os.makedirs(config.meta_dir, exist_ok=True)
+    os.makedirs(config.root_ckpt, exist_ok=True)
     with open(os.path.join(config.meta_dir, "config.yaml"), "w") as f:
         f.write(yaml.dump(config))
         f.close()
@@ -341,14 +300,7 @@ def train(config):
     _betas = stable_diffusion_beta_schedule()
     schedule = Schedule(_betas)
     logging.info(f'use {schedule}')
-    # for name, param in nnet.named_parameters():
-    #         param.requires_grad = True
-    # for name, param in nnet.named_parameters():
-    #     if 'lora_adapters_itot' not in name and 'lora_adapters_ttoi' not in name:
-    #         param.requires_grad = False
-    # for name, param in nnet.named_parameters():
-    #     if 'text_embed' in name or 'token_embedding' in name:
-    #         param.requires_grad = True
+
     
     # 验证哪些参数被冻结
     for name, param in nnet.named_parameters():
@@ -379,7 +331,7 @@ def train(config):
         #z= false text = true
        
         bloss = LSimple_T2I(img=z,clip_img=clip_img, text=text, data_type=data_type, nnet=nnet, schedule=schedule, device=device, config=config,mask=mask)
-        # bloss.requires_grad = True
+
         
         accelerator.backward(bloss)
         for name, param in nnet.named_parameters():
@@ -449,55 +401,62 @@ def train(config):
 
     def loop():
         log_step = config.log_interval 
-        # log_step = 0
         # eval_step = 1000000
-        save_step = config.save_interval # 100
-        # save_step = 0
-        count = 0
+        save_step = config.train_step
+  
         while True:
             nnet.train()
             with accelerator.accumulate(nnet),accelerator.accumulate(text_encoder):
                 metrics = train_step()
             print("metrics",metrics)
-            count+=1
-         
+           
             accelerator.wait_for_everyone()
             
             if accelerator.is_main_process:
                 # nnet.eval()
                 total_step = train_state.step * config.batch_size
+                
+
+                    
                 if total_step >= log_step:
+                    i = total_step // config.log_interval
                     logging.info(utils.dct2str(dict(step=total_step, **metrics)))
                #     wandb.log(utils.add_prefix(metrics, 'train'), step=total_step)
-                    # train_state.save(os.path.join(config.log_dir, f'{total_step:04}.ckpt'))
+                    logging.info(f"saving {i}th logging ckpts to {config.root_ckpt}_{i*1000}...")
+                    
+                    if not os.path.exists(config.root_ckpt + f"_{i*1000}"):
+                        os.makedirs(config.root_ckpt + f"_{i*1000}", exist_ok=True)
+                        logging.info("Mkdir {}".format(config.root_ckpt + f"_{i*1000}"))
+                        
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + f"_{i*1000}")
+                    train_state.save_lora(os.path.join(config.root_ckpt + f"_{i*1000}", 'lora.pt.tmp'))
+
                     log_step += config.log_interval
 
-                # if total_step >= eval_step:
-                #     eval(total_step)
-                #     eval_step += config.eval_interval
-
-                # if total_step >= config.save_interval :#save_step = 300
-                #     logging.info(f'Save and eval checkpoint {total_step}...')
-                #     train_state.save(os.path.join(config.ckpt_root, f'{total_step:04}.ckpt'))
-                #     save_step += config.save_interval
-                   
-                if total_step >= 50:
+                if total_step >= save_step:
+                    
+                    if not os.path.exists(config.outdir):
+                        os.makedirs(config.outdir, exist_ok=True)
+                        logging.info("Mkdir {}".format(config.outdir))
                     logging.info(f"saving final ckpts to {config.outdir}...")
+                    
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir)
-                    train_state.save(os.path.join(config.outdir, 'final.ckpt'))
-                    # train_state.save_lora(os.path.join(config.outdir, 'lora.pt.tmp'))
+                    train_state.save_lora(os.path.join(config.outdir, 'lora.pt.tmp'))
+                    
                     break
-
-
     loop()
 
 def get_args():
     parser = argparse.ArgumentParser()
     # key args
-    # parser.add_argument('-d', '--data', type=str, default="train_data/girl2", help="datadir")
     parser.add_argument('-o', "--outdir", type=str, default="model_ouput/girl2", help="output of model")
+    
+    parser.add_argument("--train_step", type=int, default=2000, help="total training steps")
+    parser.add_argument("--log_interval", type=int, default=1000, help="log interval")
+    
+    
     # args of logging
-    parser.add_argument("--logdir", type=str, default="logs", help="the dir to put logs")
+    parser.add_argument("--log_dir", type=str, default="logs", help="the dir to put logs")
     parser.add_argument("--nnet_path", type=str, default="models/uvit_v1.pth", help="nnet path to resume")
     parser.add_argument("--hflip", action="store_true", help="Apply horizontal flip data augmentation.")
     parser.add_argument(
@@ -542,16 +501,6 @@ def get_args():
             " concepts_list, additional images will be sampled with class_prompt."
         ),
     )
-
-    # parser.add_argument(
-    #     "--logging_dir",
-    #     type=str,
-    #     default="logs",
-    #     help=(
-    #         "[TensorBoard](https://www.tensorflow.org/tensorboard) log directory. Will default to"
-    #         " *outdir/runs/**CURRENT_DATETIME_HOSTNAME***."
-    #     ),
-    # )
     parser.add_argument(
         "--instance_data_dir",
         type=str,
@@ -600,8 +549,6 @@ def get_args():
         if args.class_prompt is not None:
             warnings.warn("You need not use --class_prompt without --with_prior_preservation.")
 
-
-
     return args
 
 def main():
@@ -611,7 +558,10 @@ def main():
     config = get_config()
     config_name = "unidiffuserv1"
     args = get_args()
-    config.log_dir = args.logdir
+    
+    
+    
+    config.log_dir = args.log_dir
     config.outdir = args.outdir
     config.data = args.instance_data_dir
     config.modifier_token = args.modifier_token
@@ -626,6 +576,9 @@ def main():
     config.real_prior = args.real_prior
     config.num_class_images = args.num_class_images
     config.hflip = args.hflip
+    
+    config.train_step = args.train_step
+    config.log_interval = args.log_interval
     
     data_name = Path(config.data).stem
 

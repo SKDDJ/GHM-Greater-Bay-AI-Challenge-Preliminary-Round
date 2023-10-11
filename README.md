@@ -1,104 +1,51 @@
-# 参赛手册
+# 代码说明
 
-## 比赛内容
-当前基于扩散模型（Diffusion model）的文到图生成已经取得了显著进展，只需要通过简单的自然语言的描述即可生成高质量图像，这种技术在电子商务、虚拟现实、娱乐等领域有着广泛应用，显著提高了图像生成的效率和质量，也为用户带来了更加方便和丰富的图像体验。
+## 预测性能
 
-在大模型的广泛应用中，个性化对于许多应用领域来说非常重要，因为不同的用户或任务需要不同的模型行为或输出。个性化可以使模型更好地适应特定用户或任务的需求，并提高模型的预测或生成效果。此外，大模型的可控生成的能力也是影响大模型应用到精细的下游领域的重要因素。
+预计训练和推理总耗时10小时左右
 
-为了推动扩散模型在模型个性化和可控生成技术的发展，本赛题提供了基座扩散模型UniDiffuser，参赛选手基于此模型，进行人脸的个性化生成和精细的生成控制。比赛旨在寻找高效、准确、创意的个性化和可控生成方案，从而提升人工智能内容生成领域的研究水平。
+## 环境配置（必选）
 
-## 比赛任务
-初赛任务的总体目标是能够根据提供的数据集，很好的生成复现原人物的特征，同时保证尽可能好的可编辑性。比赛的pipeline中不能有人的介入（不能通过人的判断来给模型提供技术路线或者编辑引导的介入）。
-初赛需要实现的功能：
-- 复现: 生成的图片和训练图片的相似度
-- 编辑: 在给定编辑指令的情况下能够同时做到人物的复现和给定指令的遵循
+在 Dockerfile 中有每一步的注释，详情见 Dockerfile 文件
 
-**模型:**
-比赛使用Unidiffuer作为基座模型，注意：为了比赛公平性，选手均需基于Unidiffuer进行二次开发，不得使用其他预训练的文到图生成模型。在图像预处理和后处理等阶段可以使用其他的人工智能模型。
+## 数据（必选）
 
-**数据:**
-由赛方提供的个人物图片集(两男两女，共4个数据集)。同时比赛还会提供测试的编辑指令用于进阶功能的本地测试。正式比赛时赛方会提供与本地编辑指令相似的隐藏测例进行测评。
+* 使用了CelebA（CelebFaces Attribute）人脸属性数据集，由香港中文大学开放提供，数据获取链接为http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html，随机获得200张男性人脸（在训练boy1和boy2模型时作为正则数据集使用）和200张女性人脸
 
-| 数据集名称 | 数据集内容 | 数据集大小| 数据样例 |
-| --- | --- | --- | ---- |
-| boy1 | 男性照片| 3张| ![boy1_example.ipc](./resources/boy1_example.jpeg)|
-| boy2 | 男性照片| 10张| ![boy2_example.ipc](./resources/boy2_example.jpeg) |
-| girl1 | 女性照片| 3张| ![girl1_example.ipc](./resources/girl1_example.jpeg)|
-| gril2 | 女性照片| 10张| ![girl2_example.ipc](./resources/girl2_example.jpeg)|
+  * 在训练girl1和girl2模型时作为正则数据集使用
+* 对官方提供的数据集进行移除背景和裁剪人像的操作，放进train_data_crop文件夹内
 
+  * 在 train.sh文件中指定训练数据集的时候使用
 
+## 预训练模型（必选）
 
-## 开始比赛
+* 使用了 CompVis/stable-diffusion-v1-4中的 AutoTokenizer， 代码继承自 custom diffusion中微调 CLIP Text Encoder 部分
+  * 路径位于other_models/stablediffusion/ 下
+  * 并且代码中应该会自动从 hugging face 上拉取
 
+## 算法（必选）
 
-### 环境搭建&比赛资源获取
-比赛使用python为主要的编程语言, pytorch为主要的深度学习库。
-我们提供了一个开发过程中所使用的环境列表:
-```
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-```
+* 整体思路介绍（必选）
 
-同时我们也提供**Docker 环境:**
+[Texual Inversion]中微调CLIP Text Encoder 的方法 -> 为防止过拟合采用[DreamBooth]中的Prior Loss方法 -> 为 UViT 的指定 Layer 加入 LoRA
 
-将下载的代码文件解压, 随后挂载到docker镜像即可。
-```shell
-docker pull xiangxiaoyu/unidiffuser:v1.0
-docker run -it --rm --gpus all  \
--v ./<解压后的路径>:/workspace \
-xiangxiaoyu/unidiffuser:v1.0 /bin/bash
-```
+* 方法的创新点
 
+之前在训练步数较少的情况下采用过 cross attention 的 LoRA
 
-从[云盘](https://cloud.tsinghua.edu.cn/d/1f0f8b1ada0e46a68542/)下载需要使用的模型，并放置于`models`文件夹:
-```
-├── autoencoder_kl.pth
-├── caption_decoder.pth
-├── gpt2
-│   ├── config.json
-│   ├── generation_config.json
-│   ├── merges.txt
-│   ├── pytorch_model.bin
-│   ├── tokenizer.json
-│   └── vocab.json
-└── uvit_v1.pth
-```
+* 算法的其他细节
 
+1. 自定义Token和CLIP Tokenizer更新：通过添加一个近义词的自定义token，扩展了CLIP模型的文本处理能力。更新CLIP Tokenizer，以包括新的token，确保模型能够识别和处理它。更新CLIPTextModel的embedding层，以适应新的token；
+2. 人脸正则数据集：为了避免模型的过拟合和语言漂移问题，引入了人脸正则数据集，帮助模型学习更好地理解人脸。训练数据集由 instance data 和 class data 组成，计算loss时，将模型输出分开，分别算loss；
+3. 参数微调：利用peft库中的lora，对模型的"qkv","fc1","fc2","proj","text_embed","clip_img_embed"部分进行参数微调。
 
-### 文件介绍
-此仓库的文件树如下, 每个重要文件的开头都有对文件作用和允许修改的文件范围进行说明,建议赛手在比赛过程中首先阅读这些内容。
+### 整体思路介绍（必选）
 
-``` shell
-├── bench_samples_standard # sample_bench在无优化情况下生成的标准图片
-│   ├── an elephant under the sea-000.jpg
-│   ├── ....
-├── configs # 模型的配置文件
-│   ├── sample_config.py
-│   └── unidiffuserv1.py
-├── libs  # 训练和生成代码所用到的依赖文件
-│   ├── autoencoder.py
-│   ├── ....
-├── model_output # 用于存放训练产生的模型
-│   ├── boy1
-│   ├── boy2
-│   ├── girl1
-│   └── girl2
-├── models # 用于存放需要使用的初始模型(从云盘下载后放置于此, 请保持文件结构一致)
-├── README.md # 本文件
-├── sample_bench.py # 用于测试内存使用和推理速度的文件
-├── sample.py # 基于prompt模型生成图片的文件
-├── sample.sh # 基于所有数据集进行生成
-├── score_utils # 用于计算分数的文件
-├── score.py # 计算得分的文件
-├── train_data # 训练数据
-│   ├── boy1
-│   ├── boy2
-│   ├── girl1
-│   └── girl2
-├── train.py # 训练代码
-├── train.sh # 批量训练代码
-└── utils.py # 通用函数
-```
+1. 用近义词初始化 `<new1>`，微调 CLIP Text Encoder
+2. 为了避免过拟合和语言漂移，加入人脸正则数据集；
+3. 利用peft库中的lora，对模型进行参数微调。
 
+<<<<<<< Updated upstream
 训练代码说明:
 
 基于单个数据集进行训练:
@@ -146,20 +93,19 @@ python score.py
 # 可自行提供路径
 python score.py --dataset '<数据路径>' --prompts '<prompt路径>' --outputs '<提交路径>'
 ```
+=======
+## 训练流程（必选）
+>>>>>>> Stashed changes
 
+1. 定义命令行参数，包括数据目录和输出目录。
+2. 在loop()函数中，使用train_state对象进行模型训练。
+3. 在训练过程中，使用accelerator.is_main_process判断当前进程是否为主进程。
+4. 如果是主进程，计算当前步数total_step，并在达到一定步数时记录日志和保存模型。
+5. 在达到一定步数时，保存模型的checkpoint文件，以便后续进行模型推理。
+6. 在训练结束时，保存最终的模型checkpoint文件。
 
 ## 其他注意事项
-- 数据安全问题: 本次比赛提供的数据仅限比赛使用。赛手出现违规使用比赛数据, 或者广泛传播比赛数据以及生成的图片的, 赛方可以取消比赛选手的参赛资格。
 
-
-
-## 可参考的资料
-
-- [Textural inversion](https://arxiv.org/abs/2208.01618)
-- [DreamBooth](https://arxiv.org/abs/2208.12242)
-- [Custom Diffusion](https://www.cs.cmu.edu/~custom-diffusion/)
-- [A Closer Look at Parameter-Efficient Tuning in Diffusion Models](https://arxiv.org/abs/2303.18181)
-- [unidiffuser](https://github.com/thu-ml/unidiffuser)
-- [LoRA](https://github.com/microsoft/LoRA)
-
-
+* 运行代码命令须参考修改过的train.sh和sample.sh文件
+* 控制训练步数（以“图文对”为单位）的参数所在位置：workspace路径下train.py 文件第396行
+* 因为我们初赛最终版本train_step为 10000步，并且使用了multi_stage的训练方法，即训练中途更换过训练集图片，这一版复现分数应该达不到初赛最终版那么高。

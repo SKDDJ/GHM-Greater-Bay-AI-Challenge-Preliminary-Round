@@ -1,0 +1,8 @@
+
+   python sample.py --restore_path model_output/girl2 --prompt_path eval_prompts_advance/girl2.json --output_path outputs/girl2_edit    --weight_dir model_output/girl2
+
+ sudo docker run -it --gpus "device=2,3" --rm -v /home/schengwei/com/eval_prompts_advance:/workspace/eval_prompts_advance -v /home/schengwei/com/train_data:/workspace/train_data -v /home/schengwei/com/models:/workspace/models   -v /home/schengwei/com/sample.py:/workspace/sample.py -v /home/schengwei/.insightface:/root/.insightface -v /home/schengwei/.cache/huggingface:/root/.cache/huggingface skddj/xiugou
+
+ sudo docker run -it --gpus all --rm -v /home/schengwei/Competitionrepo/models:/workspace/models   -v /home/schengwei/.cache:/root/.cache skddj/xiugo:v3
+
+   sudo docker run -it --gpus all --rm -v /home/schengwei/Competitionrepo/models:/workspace/models   -v /home/schengwei/.cache:/root/.cache skddj/xiugo:v4

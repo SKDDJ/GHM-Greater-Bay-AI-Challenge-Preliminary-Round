@@ -107,7 +107,7 @@ class PersonalizedBase(Dataset):
                  tokenizer=None,
                  config = None,
                  hflip=False,
-                 aug=True,
+                 aug=False,
                  ):
         self.size = size
         self.mask_size = mask_size
@@ -127,6 +127,13 @@ class PersonalizedBase(Dataset):
             inst_img_path = [
                 (x, concept["instance_prompt"]) for x in Path(concept["instance_data_dir"]).iterdir() if x.is_file()
             ]
+            
+            # 替换 prompt 如果传入的图片有背景的话
+            for i in range(len(inst_img_path)):
+                path, text = inst_img_path[i]
+                if str(path).endswith('.jepg'):
+                    inst_img_path[i] = (path, 'a <new1> boy in the room')
+           
             self.instance_images_path.extend(inst_img_path)
 
             class_data_root = Path(concept["class_data_dir"])
@@ -215,14 +222,13 @@ class PersonalizedBase(Dataset):
                 else np.random.randint(int(1.2 * self.size), int(1.4 * self.size))
             )
         
-        
-        
+        random_scale = self.size
         instance_image, mask = self.preprocess(instance_image, random_scale, self.interpolation)
         
-        if random_scale < 0.6 * self.size:
-            instance_prompt = np.random.choice(["a far away ", "very small "]) + instance_prompt
-        elif random_scale > self.size:
-            instance_prompt = np.random.choice(["zoomed in ", "close up "]) + instance_prompt
+        # if random_scale < 0.6 * self.size:
+        #     instance_prompt = np.random.choice(["a far away ", "very small "]) + instance_prompt
+        # elif random_scale > self.size:
+        #     instance_prompt = np.random.choice(["zoomed in ", "close up "]) + instance_prompt
         
         example["instance_images"] = torch.from_numpy(instance_image).permute(2, 0, 1)
         example["mask"] = torch.from_numpy(mask)
