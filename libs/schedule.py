@@ -64,7 +64,7 @@ class Schedule(object):  # discrete time
     def sample(self, x0):  # sample from q(xn|x0), where n is uniform
         if isinstance(x0, list):
             n = np.random.choice(list(range(1, self.N + 1)), (len(x0[0]),))
-            # n = np.array([1000, 1000])
+            # n = np.array([1000, 1000, 1000, 1000])
             eps = [torch.randn_like(tensor) for tensor in x0]
             xn = [stp(self.cum_alphas[n] ** 0.5, tensor) + stp(self.cum_betas[n] ** 0.5, _eps) for tensor, _eps in zip(x0, eps)]
             return torch.tensor(n), eps, xn
@@ -94,7 +94,7 @@ def LSimple_T2I(img, clip_img, text, data_type, nnet, schedule, device, config, 
     t_text=torch.zeros_like(n, device=device)
     data_type=torch.zeros_like(t_text, device=device, dtype=torch.int) + config.data_type
     
-    # torch.save(img_n, 'girl2_img_face.pt')
+    # torch.save(img_n, 'boy1_img_face.pt')
     # exit()
     img_out, clip_img_out, text_out = nnet(img_n, clip_img_n, text, t_img=n, t_text=t_text, data_type=data_type)
     

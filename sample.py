@@ -173,25 +173,25 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
 
 
     def sample_fn(**kwargs):
-        _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
+        # _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
         _clip_img_init = torch.randn(_n_samples, 1, config.clip_img_dim, device=device)
         
-        # if 'girl1' in config.lora_path:
-        #      _z_init = torch.load('girl1_img.pt')
-        #      _z_init = _z_init[0]
-        # elif 'girl2' in config.lora_path:
-        #      _z_init = torch.load('girl2_img_face.pt')
-        #      _z_init = _z_init[0]
-        # elif 'boy1' in config.lora_path:
-        #      _z_init = torch.load('boy1_img.pt')
-        #      _z_init = _z_init[0]
-        # elif 'boy2' in config.lora_path:
-        #      _z_init = torch.load('boy2_img.pt')
-        #      _z_init = _z_init[0]
-        # else:
-        #     exit()
+        if 'girl1' in config.lora_path:
+             _z_init = torch.load('girl1_img.pt')
+             _z_init = _z_init[0]
+        elif 'girl2' in config.lora_path:
+             _z_init = torch.load('girl2_img_face.pt')
+             _z_init = _z_init[0]
+        elif 'boy1' in config.lora_path:
+             _z_init = torch.load('boy1_img_face.pt')
+             _z_init = _z_init[2]
+        elif 'boy2' in config.lora_path:
+             _z_init = torch.load('boy2_img.pt')
+             _z_init = _z_init[0]
+        else:
+            exit()
         
-        # _z_init = torch.stack([_z_init]*config.n_samples)
+        _z_init = torch.stack([_z_init]*config.n_samples)
     
 
         _x_init = combine(_z_init, _clip_img_init)

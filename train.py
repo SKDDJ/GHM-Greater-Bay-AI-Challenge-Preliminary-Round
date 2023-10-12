@@ -457,11 +457,11 @@ def train(config):
                     # train_state.save(os.path.join(config.log_dir, f'{total_step:04}.ckpt'))
                     log_step += config.log_interval
        
-                if total_step == 1000:
-                    logging.info(f"saving final ckpts to {config.outdir}_1000...")
-                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_1000")
+                if total_step == 3000:
+                    logging.info(f"saving final ckpts to {config.outdir}_3000...")
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_3000")
                     # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
-                    train_state.save_lora(os.path.join(config.outdir + "_1000", 'lora.pt.tmp'))
+                    train_state.save_lora(os.path.join(config.outdir + "_3000", 'lora.pt.tmp'))
 
                 if total_step == 2000:
                     logging.info(f"saving final ckpts to {config.outdir}_2000...")
@@ -469,23 +469,24 @@ def train(config):
                     # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
                     train_state.save_lora(os.path.join(config.outdir + "_2000", 'lora.pt.tmp'))
 
-                if total_step == 3000:
-                    logging.info(f"saving final ckpts to {config.outdir}_3000...")
-                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_3000")
-                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
-                    train_state.save_lora(os.path.join(config.outdir + "_3000", 'lora.pt.tmp'))
 
+                if total_step == 2500:
+                    logging.info(f"saving final ckpts to {config.outdir}_2500...")
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_2500")
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    train_state.save_lora(os.path.join(config.outdir + "_2500", 'lora.pt.tmp'))
+                
+                if total_step == 3500:
+                    logging.info(f"saving final ckpts to {config.outdir}_3500...")
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_3500")
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    train_state.save_lora(os.path.join(config.outdir + "_3500", 'lora.pt.tmp'))   
+                
                 if total_step == 4000:
                     logging.info(f"saving final ckpts to {config.outdir}_4000...")
                     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_4000")
                     # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
-                    train_state.save_lora(os.path.join(config.outdir + "_4000", 'lora.pt.tmp'))
-                
-                if total_step == 5000:
-                    logging.info(f"saving final ckpts to {config.outdir}_5000...")
-                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_5000")
-                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
-                    train_state.save_lora(os.path.join(config.outdir + "_5000", 'lora.pt.tmp')) 
+                    train_state.save_lora(os.path.join(config.outdir + "_4000", 'lora.pt.tmp')) 
                     break
                 if total_step == 6000:
                     logging.info(f"saving final ckpts to {config.outdir}_6000...")

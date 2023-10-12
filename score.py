@@ -145,9 +145,9 @@ def score(dataset_base, prompts_base, outputs_base,i):
     # DATANAMES = ["boy1", "boy2", "girl1", "girl2"]
     # SIM_TASKNAMES = ['boy1_sim', 'boy2_sim', 'girl1_sim', 'girl2_sim']
     # EDIT_TASKNAMES = ['boy1_edit', 'boy2_edit', 'girl1_edit', 'girl2_edit']
-    DATANAMES = ["girl2"]
-    SIM_TASKNAMES = ['girl2_sim']
-    EDIT_TASKNAMES = ['girl2_edit']
+    DATANAMES = ["boy1"]
+    SIM_TASKNAMES = ['boy1_sim']
+    EDIT_TASKNAMES = ['boy1_edit']
     ## folder check
     for taskname in DATANAMES:
         task_dataset = os.path.join(dataset_base, f'{taskname}')
@@ -158,7 +158,7 @@ def score(dataset_base, prompts_base, outputs_base,i):
         if i == -1:
             task_output = os.path.join(outputs_base, f'{taskname}')
         else:
-            task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
+            task_output = os.path.join(outputs_base, f'{taskname}_{i*500}')
         assert os.path.exists(task_output), f"Missing Output folder: {task_output}"
         
     def score_task(sample_folder, dataset_folder, prompt_json):
@@ -213,7 +213,7 @@ def score(dataset_base, prompts_base, outputs_base,i):
         if i == -1:
             task_output = os.path.join(outputs_base, f'{taskname}')
         else:
-            task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
+            task_output = os.path.join(outputs_base, f'{taskname}_{i*500}')
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
         sim_scores.append(score)
@@ -226,8 +226,8 @@ def score(dataset_base, prompts_base, outputs_base,i):
         if i == -1:
             task_output = os.path.join(outputs_base, f'{taskname}')
         else:
-            task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
-        task_output = os.path.join(outputs_base, f'{taskname}_{i*1000}')
+            task_output = os.path.join(outputs_base, f'{taskname}_{i*500}')
+     
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
         edit_scores.append(score)
@@ -237,7 +237,6 @@ def score(dataset_base, prompts_base, outputs_base,i):
     score_dict = {
         "复现功能的人脸相似度": sim_ave_score[0],
         "复现功能的CLIP图片相似度": sim_ave_score[1],
-
         "编辑功能的人脸相似度": edit_ave_score[0],
         "编辑功能的CLIP图片相似度": edit_ave_score[1],
         "编辑功能的图文匹配度": edit_ave_score[2],
@@ -253,8 +252,9 @@ if __name__ == "__main__":
     parser.add_argument('--outputs', type=str, default='./outputs/', help='output folder')
 
     args = parser.parse_args()
-    for i in range(0,5):
-        eval_score = score(args.dataset, args.prompts, args.outputs,i+1)
+    for i in range(4,9):
+        eval_score = score(args.dataset, args.prompts, args.outputs,i)
         print(eval_score)
     
-    # eval_score = score(args.dataset, args.prompts, args.outputs,i=2)
+    # eval_score = score(args.dataset, args.prompts, args.outputs,i=5)
+    # print(eval_score)

@@ -6,7 +6,7 @@ log*/
 *__pycache__
 model_output/
 outputs/
-
+boy1_img_face.pt
 ## weights anf lib
 CLIP/
 .cache/

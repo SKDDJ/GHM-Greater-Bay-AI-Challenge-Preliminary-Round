@@ -129,8 +129,16 @@ class PersonalizedBase(Dataset):
             ]
             for i in range(len(inst_img_path)):
                 path, text = inst_img_path[i]
-                if str(path).endswith('.jepg'):
-                    inst_img_path[i] = (path, 'a <new1> girl on the street')
+                if str(path).endswith('.jpeg'):
+                    if 'girl1' in path:
+                        inst_img_path[i] = (path, 'a <new1> girl in the room')
+                    elif 'boy2' in path:
+                        inst_img_path[i] = (path, 'a <new1> boy in the room')
+                    elif 'boy1' in path:
+                        inst_img_path[i] = (path, 'a <new1> boy')
+                    elif 'girl2' in path:
+                        inst_img_path[i] = (path, 'a <new1> girl on the street')
+
            
             self.instance_images_path.extend(inst_img_path)
 
