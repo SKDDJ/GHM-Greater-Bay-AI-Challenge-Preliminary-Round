@@ -128,11 +128,23 @@ class PersonalizedBase(Dataset):
                 (x, concept["instance_prompt"]) for x in Path(concept["instance_data_dir"]).iterdir() if x.is_file()
             ]
             
-            # 替换 prompt 如果传入的图片有背景的话
+            # # 替换 prompt 如果传入的图片有背景的话
+            # for i in range(len(inst_img_path)):
+            #     path, text = inst_img_path[i]
+            #     if str(path).endswith('.jepg'):
+            #         inst_img_path[i] = (path, 'a <new1> boy in the room')
             for i in range(len(inst_img_path)):
                 path, text = inst_img_path[i]
-                if str(path).endswith('.jepg'):
-                    inst_img_path[i] = (path, 'a <new1> boy in the room')
+                if str(path).endswith('.jpeg'):
+                    path = str(path)
+                    if 'girl1' in path:
+                        inst_img_path[i] = (path, 'a <new1> girl in the room')
+                    elif 'boy2' in path:
+                        inst_img_path[i] = (path, 'a <new1> boy in the room')
+                    elif 'boy1' in path:
+                        inst_img_path[i] = (path, 'a <new1> boy')
+                    elif 'girl2' in path:
+                        inst_img_path[i] = (path, 'a <new1> girl on the street')
            
             self.instance_images_path.extend(inst_img_path)
 

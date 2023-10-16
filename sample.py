@@ -28,10 +28,10 @@ import numpy as np
 import json
 from libs.uvit_multi_post_ln_v1 import UViT
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
+from resize import resize_images_in_path
 lora_config = LoraConfig(
-   inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+   inference_mode=False, r=64, lora_alpha=32, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","text_embed","clip_img_embed"]
 )
-
 
 def get_model_size(model):
     """
@@ -121,13 +121,6 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
             config.sample.t2i_cfg_mode == 'empty_token': using the original cfg with the empty string
             config.sample.t2i_cfg_mode == 'true_uncond: using the unconditional model learned by our method
         3. return linear combination of conditional output and unconditional output
-<<<<<<< HEAD
-        
-        'empty_token' 模式：在这种模式下，使用原始配置和空字符串来生成图像。这意味着生成的图像不受与之相关的文本信息的约束，生成的结果更加自由和多样化。
-
-        'true_uncond' 模式：在这种模式下，使用通过我们方法学习到的无条件模型来生成图像。这意味着生成的图像不依赖于与之相关的文本信息，生成的结果更加无条件和独立。
-=======
->>>>>>> origin/wuyujia
         """
         z, clip_img = split(x)
 
@@ -361,7 +354,8 @@ def main(argv=None):
         config.prompt = prompt
         print("sampling with prompt:", prompt)
         sample(prompt_index, config, nnet, clip_text_model, autoencoder, device)
-        
+    
+    resize_images_in_path(config.output_path)
     print(f"\033[91m finetuned parameters: {total_diff_parameters}\033[00m")
 
 if __name__ == "__main__":

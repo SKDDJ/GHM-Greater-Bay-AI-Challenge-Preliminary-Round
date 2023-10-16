@@ -292,7 +292,6 @@ def train(config):
 
     logging.info("saving meta data")
     os.makedirs(config.meta_dir, exist_ok=True)
-    os.makedirs(config.root_ckpt, exist_ok=True)
     with open(os.path.join(config.meta_dir, "config.yaml"), "w") as f:
         f.write(yaml.dump(config))
         f.close()
@@ -423,7 +422,7 @@ def train(config):
                     logging.info(utils.dct2str(dict(step=total_step, **metrics)))
                #     wandb.log(utils.add_prefix(metrics, 'train'), step=total_step)
                     logging.info(f"saving {i}th logging ckpts to {config.root_ckpt}_{i*1000}...")
-                    
+                    os.makedirs(config.root_ckpt, exist_ok=True)
                     if not os.path.exists(config.root_ckpt + f"_{i*1000}"):
                         os.makedirs(config.root_ckpt + f"_{i*1000}", exist_ok=True)
                         logging.info("Mkdir {}".format(config.root_ckpt + f"_{i*1000}"))

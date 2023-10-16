@@ -45,43 +45,40 @@
 2. 为了避免过拟合和语言漂移，加入人脸正则数据集；
 3. 利用peft库中的lora，对模型进行参数微调。
 
-<<<<<<< Updated upstream
 训练代码说明:
 
 基于单个数据集进行训练:
+
 ```shell
-accelerate launch --mixed_precision fp16 --num_processes 1 train.py -d '<训练文件所在位置>' -o '<模型输出>'
+accelerate launch --mixed_precision fp16 --num_processes 1 train.py -d '<训练文件所在位置>' -o '<模型输出>' --具体参数请参考 train.sh文件
 ```
 
 训练所有数据集:
+
 ```shell
 ./train.sh
 ```
-训练过程中的数据预处理, 模型架构, 加载方式等等均可进行修改, 只需要满足命令行接口即可, 并且模型输出位置的输出形式能够被`sample.py`文件正确解析即可。
 
+训练过程中的数据预处理, 模型架构, 加载方式等等均可进行修改, 只需要满足命令行接口即可, 并且模型输出位置的输出形式能够被 `sample.py`文件正确解析即可。
 
 生成代码说明:
-<<<<<<< HEAD
-需要训练生成一个nnet之后才能运行
-基于prompt文件生成图片:
-```shell
-python sample.py --restore_path './model_output_test' --prompt_path './eval_prompts/boy1.json' --output_path './output_test'
-=======
 
 基于prompt文件生成图片:
+
 ```shell
 python sample.py --restore_path '<模型输出>' --prompt_path '<prompt文件路径>' --output_path '<输出路径>'
->>>>>>> origin/wuyujia
 ```
+
 基于所有的prompt文件进行生成:
+
 ```
 ./sample.sh
 ```
-文件中sample的方式, prompt均可以更改, 但是测评时只会根据文件中的prompt进行测评。每个prompt要求输出三张图片, 并存放于目标路径。模型输出路径只需要能够正确解析训练产生的文件夹即可(若使用高效参数微调方法, 只需要将额外参数保存到输出路径并在sample.py中加载即可, 无需保存整个模型, 原模型可以从`models/uvit_v1.pth`中加载)。`sample.py`除了会生成图片, 还会检查用于生成的模型和原模型的参数差异大小, 用于衡量微淘的参数量, 具体的计算方式见代码。
 
-
+文件中sample的方式, prompt均可以更改, 但是测评时只会根据文件中的prompt进行测评。每个prompt要求输出三张图片, 并存放于目标路径。模型输出路径只需要能够正确解析训练产生的文件夹即可(若使用高效参数微调方法, 只需要将额外参数保存到输出路径并在sample.py中加载即可, 无需保存整个模型, 原模型可以从 `models/uvit_v1.pth`中加载)。`sample.py`除了会生成图片, 还会检查用于生成的模型和原模型的参数差异大小, 用于衡量微淘的参数量, 具体的计算方式见代码。
 
 ### 客观指标打分(部分)
+
 ```shell
 python score.py
 
@@ -93,9 +90,8 @@ python score.py
 # 可自行提供路径
 python score.py --dataset '<数据路径>' --prompts '<prompt路径>' --outputs '<提交路径>'
 ```
-=======
+
 ## 训练流程（必选）
->>>>>>> Stashed changes
 
 1. 定义命令行参数，包括数据目录和输出目录。
 2. 在loop()函数中，使用train_state对象进行模型训练。
@@ -107,5 +103,5 @@ python score.py --dataset '<数据路径>' --prompts '<prompt路径>' --outputs 
 ## 其他注意事项
 
 * 运行代码命令须参考修改过的train.sh和sample.sh文件
-* 控制训练步数（以“图文对”为单位）的参数所在位置：workspace路径下train.py 文件第396行
+* 控制训练步数（以“图文对”为单位）的参数所在位置：train.sh中的int 参数 train_step 来指定，默认 2000步
 * 因为我们初赛最终版本train_step为 10000步，并且使用了multi_stage的训练方法，即训练中途更换过训练集图片，这一版复现分数应该达不到初赛最终版那么高。

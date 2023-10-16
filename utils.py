@@ -340,8 +340,7 @@ import itertools
 from libs.clip import CLIPEmbedder
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
 lora_config = LoraConfig(
-   r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
-#    target_modules=["qkv","fc1","fc2","proj"]
+   inference_mode=False, r=64, lora_alpha=32, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","text_embed","clip_img_embed"]
 )
 
 def get_config_name():

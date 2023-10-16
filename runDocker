@@ -5,4 +5,9 @@
 
  sudo docker run -it --gpus all --rm -v /home/schengwei/Competitionrepo/models:/workspace/models   -v /home/schengwei/.cache:/root/.cache skddj/xiugo:v3
 
-   sudo docker run -it --gpus all --rm -v /home/schengwei/Competitionrepo/models:/workspace/models   -v /home/schengwei/.cache:/root/.cache skddj/xiugo:v4
+   sudo 
+   
+   docker run -it --gpus all --rm -v /home/schengwei/Competitionrepo/models:/workspace/models   -v /home/schengwei/.cache:/root/.cache   xiugo:v3
+
+
+   CUDA_VISIBLE_DEVICES=2
