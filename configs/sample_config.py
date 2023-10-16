@@ -11,8 +11,8 @@ def get_config():
     
     
     
-    config.seed = 3214
-    # config.seed = random.randint(500, 2000) # generate a random seed
+    # config.seed = 3214
+    # # config.seed = random.randint(500, 2000) # generate a random seed
     config.pred = 'noise_pred'
     config.z_shape = (4, 64, 64)
     config.clip_img_dim = 512
@@ -83,7 +83,7 @@ def get_config():
     config.n_samples = 6 # control the numbers of generating images 
     config.n_iter = 1 # 过多的迭代次数可能导致过拟合或生成的样本过于接近训练数据
     config.sample = d(
-        sample_steps=100,
+        sample_steps=150,
         scale=7.5, # scale of the text embedding 7 - 10
         t2i_cfg_mode='true_uncond', # 'empty_token' or 'true_uncond'
     )

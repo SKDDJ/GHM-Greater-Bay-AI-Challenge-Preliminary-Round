@@ -168,7 +168,7 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
 
 
     def sample_fn(**kwargs):
-        _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
+        # _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
         _clip_img_init = torch.randn(_n_samples, 1, config.clip_img_dim, device=device)
         
         ###  在这里固定 img
@@ -298,16 +298,23 @@ def main(argv=None):
     config = get_config()
     args = get_args()
     config.output_path = args.output_path
-    config.nnet_path = os.path.join(args.restore_path, "final.ckpt",'nnet.pth')
+    # config.nnet_path = os.path.join(args.restore_path, "final.ckpt",'nnet.pth')
+    config.lora_path = os.path.join(args.restore_path, "lora.pt.tmp",'lora.pt')
     config.n_samples = 3
     config.n_iter = 1
     device = "cuda"
+ 
+
 
     # init models
     nnet = UViT(**config.nnet)
-    print(f'load nnet from {config.nnet_path}')
+    print(f'load nnet from {config.lora_path}')
+    
+    nnet.load_state_dict(torch.load("models/uvit_v1.pth", map_location='cpu'), False)
+    
     nnet = get_peft_model(nnet,lora_config)
-    nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'), True)
+    # nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),True)
+    nnet.load_state_dict(torch.load(config.lora_path, map_location='cpu'), False)
     autoencoder = libs.autoencoder.get_model(**config.autoencoder)
     clip_text_model = FrozenCLIPEmbedder(version=config.clip_text_model, device=device)
     clip_text_model.to(device)
@@ -324,11 +331,14 @@ def main(argv=None):
     print(">>> evaluating nnet changed paramters")
     
     nnet_standard = UViT(**config.nnet)
+    # nnet_standard = get_peft_model(nnet_standard,lora_config)
     nnet_standard.load_state_dict(torch.load("models/uvit_v1.pth", map_location='cpu'), False)
     nnet_standard = get_peft_model(nnet_standard,lora_config)
     total_diff_parameters += compare_model(nnet_standard, nnet, nnet_mapping_dict)
     del nnet_standard
-    
+
+#    print(f"\033[91m this is the diff between uvit: {total_diff_parameters}\033[00m")
+#  this is the diff between uvit: 192137216
     autoencoder_standard = libs.autoencoder.get_model(**config.autoencoder)
     total_diff_parameters += compare_model(autoencoder_standard, autoencoder, autoencoder_mapping_dict)
     del autoencoder_standard
@@ -336,8 +346,8 @@ def main(argv=None):
     clip_text_strandard = FrozenCLIPEmbedder(version=config.clip_text_model, device=device).to("cpu")
     total_diff_parameters += compare_model(clip_text_strandard, clip_text_model, clip_text_mapping_dict)
     del clip_text_strandard
-    
-
+  
+    clip_text_model.load_textual_inversion(args.restore_path, token = "<new1>" , weight_name="<new1>.bin")
     clip_text_model.to(device)
     autoencoder.to(device)
     nnet.to(device)
@@ -350,13 +360,15 @@ def main(argv=None):
             prompt = prompt.replace("boy", "<new1> boy")
         else:
             prompt = prompt.replace("girl", "<new1> girl")
+        if "closer" in prompt:
+            prompt = config.closerprompt
 
-        config.prompt = prompt
+        config.prompt = prompt 
         print("sampling with prompt:", prompt)
         sample(prompt_index, config, nnet, clip_text_model, autoencoder, device)
     
     resize_images_in_path(config.output_path)
     print(f"\033[91m finetuned parameters: {total_diff_parameters}\033[00m")
-
+#  finetuned parameters: 268028672
 if __name__ == "__main__":
     main()

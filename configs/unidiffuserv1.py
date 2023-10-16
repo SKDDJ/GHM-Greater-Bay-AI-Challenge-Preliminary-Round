@@ -63,9 +63,14 @@ def get_config():
 
     config.lr_scheduler = d(
         name='customized',
-        warmup_steps=500 ## 这个 warmup 的步数究竟多少比较合适？
+        warmup_steps=20
     )
 
+    # config.lr_scheduler = d(
+    #     name='cosine',
+      
+    # )
+    
     config.autoencoder = d(
         pretrained_path='models/autoencoder_kl.pth',
     )
@@ -105,7 +110,7 @@ def get_config():
     config.sample = d(
         sample_steps=100, 
         scale=7.,
-        t2i_cfg_mode='true_uncond' # 笑死，之前sample 中的也是用的是true_uncond模式，生成的图片能看才见鬼
+        t2i_cfg_mode='true_uncond' 
     )
 
     return config

@@ -6,15 +6,6 @@
     - 其他的参数需要选手自行设定
 代码输出:
     - 微调后的模型以及其他附加的子模块
-    
-accelerate launch train.py \
-  --instance_data_dir ="目标图像的数据集路径" \
-  --outdir="自己的模型输出路径"\
-  --class_data_dir "自己的正则数据集路径" \
-  --with_prior_preservation  --prior_loss_weight=1.0 \
-  --class_prompt="girl" --num_class_images=200 \
-  --instance_prompt="photo of a <new1> girl"  \
-  --modifier_token "<new1>"
 """
 from accelerate import Accelerator
 import hashlib
@@ -52,14 +43,6 @@ import itertools
 import json
 #from pathos.multiprocessing import ProcessingPool as Pool
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
-lora_config = LoraConfig(
-    inference_mode=False,
-    lora_alpha=16,
-    lora_dropout=0.1,
-    r=24,
-    bias="none",
-    # target_modules=["qkv","proj"],
-)
 
 
 # 保存text encoder中新增token的embedding
@@ -201,7 +184,7 @@ def train(config):
 
     clip_img_model, clip_img_model_preprocess = clip.load(config.clip_img_model, jit=False)
     # clip_img_model.to(device).eval().requires_grad_(False)
-    clip_img_model.to(device).requires_grad_(False)
+    clip_img_model.to(device).requires_grad_(True)
     
     # Adding a modifier token which is optimized #### 来自Textual inversion代码
     # Code taken from https://github.com/huggingface/diffusers/blob/main/examples/textual_inversion/textual_inversion.py
@@ -325,17 +308,19 @@ def train(config):
         # with torch.no_grad():
         z = autoencoder.encode(img)
         clip_img = clip_img_model.encode_image(img4clip).unsqueeze(1).contiguous()
+
         text = text_encoder(text)[0]
         text = caption_decoder.encode_prefix(text)
         #z= false text = true
+
        
         bloss = LSimple_T2I(img=z,clip_img=clip_img, text=text, data_type=data_type, nnet=nnet, schedule=schedule, device=device, config=config,mask=mask)
 
         
         accelerator.backward(bloss)
-        for name, param in nnet.named_parameters():
-            if param.grad is not None:
-                print(name)
+        # for name, param in nnet.named_parameters():
+        #     if param.grad is not None:
+        #         print(name)
     
         
 
@@ -412,6 +397,7 @@ def train(config):
             accelerator.wait_for_everyone()
             
             if accelerator.is_main_process:
+       
                 # nnet.eval()
                 total_step = train_state.step * config.batch_size
                 
@@ -431,6 +417,12 @@ def train(config):
                     train_state.save_lora(os.path.join(config.root_ckpt + f"_{i*1000}", 'lora.pt.tmp'))
 
                     log_step += config.log_interval
+       
+                if total_step == 1000:
+                    logging.info(f"saving final ckpts to {config.outdir}_11000...")
+                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_11000")
+                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                    train_state.save_lora(os.path.join(config.outdir + "_11000", 'lora.pt.tmp'))
 
                 if total_step >= save_step:
                     

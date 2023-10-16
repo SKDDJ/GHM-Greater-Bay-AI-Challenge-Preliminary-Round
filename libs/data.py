@@ -55,7 +55,7 @@ def collate_fn(examples, with_prior_preservation=False):
     input_ids = torch.cat(input_ids, dim=0)
     mask = mask.unsqueeze(1)
     
-    
+
     # if has_attention_mask:
     #     attention_mask = torch.cat(attention_mask, dim=0)
     #     batch["attention_mask"] = attention_mask
@@ -217,9 +217,9 @@ class PersonalizedBase(Dataset):
     def __getitem__(self, index):
         example = {}
         instance_image, instance_prompt = self.instance_images_path[index % self.num_instance_images]
-    
-        instance_image = Image.open(instance_image)
         
+        instance_image = Image.open(instance_image)
+    
         if not instance_image.mode == "RGB":
             instance_image = instance_image.convert("RGB")
         example["instance_clip_images"] = self.transform_clip(instance_image)

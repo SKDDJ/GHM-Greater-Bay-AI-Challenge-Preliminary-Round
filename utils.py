@@ -339,9 +339,21 @@ from libs.clip import FrozenCLIPEmbedder
 import itertools
 from libs.clip import CLIPEmbedder
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
+# lora_config = LoraConfig(
+#    inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+# )
 lora_config = LoraConfig(
    inference_mode=False, r=64, lora_alpha=32, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","text_embed","clip_img_embed"]
 )
+# lora_config = LoraConfig(
+#    inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","text_embed","clip_img_embed"]
+# )
+# lora_config = LoraConfig(
+#    inference_mode=False, r=128, lora_alpha=64, lora_dropout=0.1,target_modules=["qkv","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
+# )#94,838,784
+# lora_config = LoraConfig(
+#    inference_mode=False, r=128, lora_alpha=64, lora_dropout=0.1,target_modules=["qkv","text_embed","clip_img_embed"]
+# )
 
 def get_config_name():
     argv = sys.argv
@@ -400,7 +412,9 @@ def get_lr_scheduler(optimizer, name, **kwargs):
         return customized_lr_scheduler(optimizer, **kwargs)
     elif name == 'cosine':
         from torch.optim.lr_scheduler import CosineAnnealingLR
-        return CosineAnnealingLR(optimizer, **kwargs)
+
+        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 20, T_mult=2, **kwargs)
+        # return CosineAnnealingLR(optimizer, **kwargs)
     else:
         raise NotImplementedError(name)
 
@@ -470,7 +484,7 @@ class TrainState(object):
         for name,param in self.nnet.named_parameters():
             if 'lora' in name:
                 lora_state[name]=param
-            
+        
         torch.save(lora_state,os.path.join(path,'lora.pt.tmp'))
         os.replace(os.path.join(path,'lora.pt.tmp'),os.path.join(path,'lora.pt'))
 
@@ -506,8 +520,8 @@ def initialize_train_state(config, device, uvit_class,text_encoder = None):
 
     nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),False)
     nnet = get_peft_model(nnet,lora_config)
-    # nnet.load_state_dict(torch.load(config.nnet_path, map_location='cpu'),True)
   
+    # nnet.load_state_dict(torch.load('/home/wuyujia/competition/model_output/girl1_new_10000/lora.pt.tmp/lora.pt', map_location='cpu'), False)
     nnet.print_trainable_parameters()
     
 
@@ -533,7 +547,7 @@ def initialize_train_state(config, device, uvit_class,text_encoder = None):
   
     optimizer = get_optimizer(param_lists, **config.optimizer)
   
-    lr_scheduler = get_lr_scheduler(optimizer, **config.lr_scheduler)
+    lr_scheduler = get_lr_scheduler(optimizer,**config.lr_scheduler)
 
     train_state = TrainState(optimizer=optimizer, lr_scheduler=lr_scheduler, step=0,
                              nnet=nnet, nnet_ema=nnet_ema, text_embedding=text_encoder.get_input_embeddings())

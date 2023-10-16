@@ -2,6 +2,9 @@ models/*
 
 project.zip
 
+<<<<<<< HEAD
+outputs/*
+=======
 xiugo_submit.tar
 
 runDocker
@@ -13,3 +16,4 @@ cudatest.py
 /home/schengwei/Competitionrepo/other_models/stablediffusion
 
 project/*
+>>>>>>> syiming

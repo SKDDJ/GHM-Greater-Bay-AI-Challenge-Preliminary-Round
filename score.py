@@ -140,23 +140,26 @@ class Evaluator():
 def read_img_pil(p):
     return Image.open(p)
 
-def score(dataset, prompts, outputs):
+def score(dataset_base, prompts_base, outputs_base):
     eval = Evaluator()
     
-    TASKNAMES = ['boy1', 'boy2', 'girl1', 'girl2']
+    DATANAMES = ["boy1", "boy2", "girl1", "girl2"]
+    SIM_TASKNAMES = ['boy1_sim', 'boy2_sim', 'girl1_sim', 'girl2_sim']
+    EDIT_TASKNAMES = ['boy1_edit', 'boy2_edit', 'girl1_edit', 'girl2_edit']
     
     ## folder check
-    for taskname in TASKNAMES:
-        task_dataset = os.path.join(dataset, f'{taskname}')
+    for taskname in DATANAMES:
+        task_dataset = os.path.join(dataset_base, f'{taskname}')
         assert os.path.exists(task_dataset), f"Missing Dataset folder: {task_dataset}"
-        task_prompt = os.path.join(prompts, f'{taskname}.json')
-        assert os.path.exists(task_dataset), f"Missing Prompt file: {task_prompt}"
-        task_output = os.path.join(outputs, f'{taskname}')
-        assert os.path.exists(task_dataset), f"Missing Output folder: {task_output}"
+    for taskname in SIM_TASKNAMES + EDIT_TASKNAMES:
+        task_prompt = os.path.join(prompts_base, f'{taskname}.json')
+        assert os.path.exists(task_prompt), f"Missing Prompt file: {task_prompt}"
+        task_output = os.path.join(outputs_base, f'{taskname}')
+        assert os.path.exists(task_output), f"Missing Output folder: {task_output}"
         
     def score_task(sample_folder, dataset_folder, prompt_json):
         ## get prompt, face, and ref image from dataset folder
-        refs = glob.glob(os.path.join(dataset_folder, "*.jpg"))
+        refs = glob.glob(os.path.join(dataset_folder, "*.jpg")) + glob.glob(os.path.join(dataset_folder, "*.jpeg"))
         refs_images = [read_img_pil(ref) for ref in refs]
         
         refs_clip = [eval.get_img_embedding(i) for i in refs_images]
@@ -198,31 +201,45 @@ def score(dataset, prompts, outputs):
         task_score = np.mean(pompt_scores, axis=0)
         return task_score
     
-    ## calculate score
-    scores = []
-    for taskname in TASKNAMES:
-        task_dataset = os.path.join(dataset, f'{taskname}')
-        task_prompt = os.path.join(prompts, f'{taskname}.json')
-        task_output = os.path.join(outputs, f'{taskname}')
+    ## calculate sim score
+    sim_scores = []
+    for dataname, taskname in zip(DATANAMES, SIM_TASKNAMES):
+        task_dataset = os.path.join(dataset_base, f'{dataname}')
+        task_prompt = os.path.join(prompts_base, f'{taskname}.json')
+        task_output = os.path.join(outputs_base, f'{taskname}')
         score = score_task(task_output, task_dataset, task_prompt)
         print(f"Score for task {taskname}: ", score)
-        scores.append(score)
-    print(scores)
-    ave_score = np.mean(scores, axis=0)
+        sim_scores.append(score)
+    print(sim_scores)
+    sim_ave_score = np.mean(sim_scores, axis=0)
     
-    #### print("Score for Submission:", ave_score)
-        
-    return {
-        "face": ave_score[0],
-        "img_clip": ave_score[1],
-        "text_clip": ave_score[2],
+    edit_scores = []
+    for dataname, taskname in zip(DATANAMES, EDIT_TASKNAMES):
+        task_dataset = os.path.join(dataset_base, f'{dataname}')
+        task_prompt = os.path.join(prompts_base, f'{taskname}.json')
+        task_output = os.path.join(outputs_base, f'{taskname}')
+        score = score_task(task_output, task_dataset, task_prompt)
+        print(f"Score for task {taskname}: ", score)
+        edit_scores.append(score)
+    print(edit_scores)
+    edit_ave_score = np.mean(edit_scores, axis=0)
+    
+    score_dict = {
+        "复现功能的人脸相似度": sim_ave_score[0],
+        "复现功能的CLIP图片相似度": sim_ave_score[1],
+
+        "编辑功能的人脸相似度": edit_ave_score[0],
+        "编辑功能的CLIP图片相似度": edit_ave_score[1],
+        "编辑功能的图文匹配度": edit_ave_score[2],
     }
+    print(f"\033[91m 最终结果:\n{score_dict}\033[00m")
+    return score_dict
     
     
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Evaluation Script')
     parser.add_argument('--dataset', type=str, default='./train_data/', help='dataset folder')
-    parser.add_argument('--prompts', type=str, default='./eval_prompts/', help='prompt folder')
+    parser.add_argument('--prompts', type=str, default='./eval_prompts_advance/', help='prompt folder')
     parser.add_argument('--outputs', type=str, default='./outputs/', help='output folder')
 
     args = parser.parse_args()
