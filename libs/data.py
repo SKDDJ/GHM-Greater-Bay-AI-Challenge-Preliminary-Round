@@ -127,17 +127,19 @@ class PersonalizedBase(Dataset):
             inst_img_path = [
                 (x, concept["instance_prompt"]) for x in Path(concept["instance_data_dir"]).iterdir() if x.is_file()
             ]
-            for i in range(len(inst_img_path)):
-                path, text = inst_img_path[i]
-                if str(path).endswith('.jpeg'):
-                    if 'girl1' in path:
-                        inst_img_path[i] = (path, 'a <new1> girl in the room')
-                    elif 'boy2' in path:
-                        inst_img_path[i] = (path, 'a <new1> boy in the room')
-                    elif 'boy1' in path:
-                        inst_img_path[i] = (path, 'a <new1> boy')
-                    elif 'girl2' in path:
-                        inst_img_path[i] = (path, 'a <new1> girl on the street')
+        for i in range(len(inst_img_path)):
+            path, text = inst_img_path[i]
+            if str(path).endswith('.jpeg'):
+                path_str = str(path)  # 将PosixPath对象转换为字符串
+                if 'girl1' in path_str:
+                    inst_img_path[i] = (path, 'a <new1> girl in the room')
+                elif 'boy2' in path_str:
+                    inst_img_path[i] = (path, 'a <new1> boy in the room')
+                elif 'boy1' in path_str:
+                    inst_img_path[i] = (path, 'a <new1> boy')
+                elif 'girl2' in path_str:
+                    inst_img_path[i] = (path, 'a <new1> girl on the street')
+
 
            
             self.instance_images_path.extend(inst_img_path)
@@ -186,7 +188,11 @@ class PersonalizedBase(Dataset):
         if scale > self.size:
             outer, inner = scale, self.size
         top, left = np.random.randint(0, outer - inner + 1), np.random.randint(0, outer - inner + 1)
+ 
         image = image.resize((scale, scale), resample=resample)
+        
+
+        
         image = np.array(image).astype(np.uint8)
    
         image = (image / 127.5 - 1.0).astype(np.float32)
@@ -203,9 +209,6 @@ class PersonalizedBase(Dataset):
                 top // factor + 1 : (top + scale) // factor - 1, left // factor + 1 : (left + scale) // factor - 1
             ] = 1.0
             mask = np.ones((64,64))
-          
-            
-        
         return instance_image, mask
 
     def __getitem__(self, index):

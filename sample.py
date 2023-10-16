@@ -27,6 +27,7 @@ from libs.clip import FrozenCLIPEmbedder
 import numpy as np
 import json
 from libs.uvit_multi_post_ln_v1 import UViT
+from resize import resize_images_in_path
 from peft import inject_adapter_in_model, LoraConfig,get_peft_model
 # lora_config = LoraConfig(
 #    inference_mode=False, r=128, lora_alpha=90, lora_dropout=0.1,target_modules=["qkv","fc1","fc2","proj","to_out","to_q","to_k","to_v","text_embed","clip_img_embed"]
@@ -173,25 +174,25 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
 
 
     def sample_fn(**kwargs):
-        # _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
+        _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
         _clip_img_init = torch.randn(_n_samples, 1, config.clip_img_dim, device=device)
         
-        if 'girl1' in config.lora_path:
-             _z_init = torch.load('girl1_img.pt')
-             _z_init = _z_init[0]
-        elif 'girl2' in config.lora_path:
-             _z_init = torch.load('girl2_img_face.pt')
-             _z_init = _z_init[0]
-        elif 'boy1' in config.lora_path:
-             _z_init = torch.load('boy1_img_face.pt')
-             _z_init = _z_init[2]
-        elif 'boy2' in config.lora_path:
-             _z_init = torch.load('boy2_img.pt')
-             _z_init = _z_init[0]
-        else:
-            exit()
+        # if 'girl1' in config.lora_path:
+        #      _z_init = torch.load('girl1_img.pt')
+        #      _z_init = _z_init[0]
+        # elif 'girl2' in config.lora_path:
+        #      _z_init = torch.load('girl2_img_face.pt')
+        #      _z_init = _z_init[0]
+        # elif 'boy1' in config.lora_path:
+        #      _z_init = torch.load('boy1_img_face.pt')
+        #      _z_init = _z_init[2]
+        # elif 'boy2' in config.lora_path:
+        #      _z_init = torch.load('boy2_img.pt')
+        #      _z_init = _z_init[0]
+        # else:
+        #     exit()
         
-        _z_init = torch.stack([_z_init]*config.n_samples)
+        # _z_init = torch.stack([_z_init]*config.n_samples)
     
 
         _x_init = combine(_z_init, _clip_img_init)
@@ -224,7 +225,6 @@ def sample(prompt_index, config, nnet, clip_text_model, autoencoder, device):
     for idx, sample in enumerate(samples):
         save_path = os.path.join(config.output_path, f'{prompt_index}-{idx:03}.jpg')
         save_image(sample, save_path)
-        
     print(f'results are saved in {save_path}')
 
 
@@ -301,7 +301,6 @@ def main(argv=None):
     config.n_samples = 3
     config.n_iter = 1
     device = "cuda"
- 
 
 
     # init models
@@ -355,13 +354,12 @@ def main(argv=None):
             prompt = prompt.replace("boy", "<new1> boy")
         else:
             prompt = prompt.replace("girl", "<new1> girl")
-        if "closer" in prompt:
-            prompt = config.closerprompt
-
+  
         config.prompt = prompt 
         print("sampling with prompt:", prompt)
         sample(prompt_index, config, nnet, clip_text_model, autoencoder, device)
-        
+    
+    resize_images_in_path(config.output_path)
     print(f"\033[91m finetuned parameters: {total_diff_parameters}\033[00m")
 #  finetuned parameters: 268028672
 if __name__ == "__main__":

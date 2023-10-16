@@ -145,9 +145,9 @@ def score(dataset_base, prompts_base, outputs_base,i):
     # DATANAMES = ["boy1", "boy2", "girl1", "girl2"]
     # SIM_TASKNAMES = ['boy1_sim', 'boy2_sim', 'girl1_sim', 'girl2_sim']
     # EDIT_TASKNAMES = ['boy1_edit', 'boy2_edit', 'girl1_edit', 'girl2_edit']
-    DATANAMES = ["boy1"]
-    SIM_TASKNAMES = ['boy1_sim']
-    EDIT_TASKNAMES = ['boy1_edit']
+    DATANAMES = ["girl2"]
+    SIM_TASKNAMES = ['girl2_sim']
+    EDIT_TASKNAMES = ['girl2_edit']
     ## folder check
     for taskname in DATANAMES:
         task_dataset = os.path.join(dataset_base, f'{taskname}')
@@ -252,9 +252,9 @@ if __name__ == "__main__":
     parser.add_argument('--outputs', type=str, default='./outputs/', help='output folder')
 
     args = parser.parse_args()
-    for i in range(4,9):
-        eval_score = score(args.dataset, args.prompts, args.outputs,i)
-        print(eval_score)
+    # for i in range(4,9):
+    #     eval_score = score(args.dataset, args.prompts, args.outputs,i)
+    #     print(eval_score)
     
-    # eval_score = score(args.dataset, args.prompts, args.outputs,i=5)
-    # print(eval_score)
+    eval_score = score(args.dataset, args.prompts, args.outputs,i=2)
+    print(eval_score)

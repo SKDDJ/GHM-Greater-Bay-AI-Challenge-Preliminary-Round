@@ -28,7 +28,7 @@ def get_config():
     config.num_workers = 10
     config.batch_size = 6
     config.resolution = 512
-    config.closerprompt = "photo of a <new1> girl"
+
     config.clip_img_model = "ViT-B/32"
     config.clip_text_model = "/home/wuyujia/.cache/huggingface/hub/models--openai--clip-vit-large-patch14/snapshots/8d052a0f05efbaefbc9e8786ba291cfdf93e5bff"
     

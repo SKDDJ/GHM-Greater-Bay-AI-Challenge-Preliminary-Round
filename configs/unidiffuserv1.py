@@ -8,7 +8,7 @@ def d(**kwargs):
 
 def get_config():
     config = ml_collections.ConfigDict()
-
+    config.training_step=2000
     config.seed = 1234
     config.pred = 'noise_pred'
     config.pretrained_path = "/home/wuyujia/.cache/huggingface/hub/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
