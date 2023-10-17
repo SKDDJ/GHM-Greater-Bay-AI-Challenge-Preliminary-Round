@@ -108,15 +108,7 @@ def train(config):
 
     args = get_args()
     concepts_list = args.concepts_list
-    # concepts_list = [
-    #         {
-    #             "instance_prompt": 'photo of a <new1> girl', #photo of a <new1> girl
-    #             "class_prompt": 'girl',#girl
-    #             "instance_data_dir": './train_data/oldgirl2',#./train_data/girl2
-    #             "class_data_dir": './real_reg/samples_girlbody/',#./real_reg/samples_person/
-    #         }
-    #     ]    
-       # Generate class images if prior preservation is enabled.
+
 
     if config.with_prior_preservation:
         for i, concept in enumerate(concepts_list):
@@ -143,7 +135,10 @@ def train(config):
                 accelerator.wait_for_everyone()
             
     # pretrained_model_name_or_path = "/data/hdd3/schengwei/models--CompVis--stable-diffusion-v1-4/snapshots/b95be7d6f134c3a9e62ee616f310733567f069ce"
-    pretrained_model_name_or_path = "CompVis/stable-diffusion-v1-4"
+    # pretrained_model_name_or_path = "CompVis/stable-diffusion-v1-4"
+    
+    pretrained_model_name_or_path = "other_models/stablediffusion/b95be7d6f134c3a9e62ee616f310733567f069ce"
+    
     tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path,
             subfolder="tokenizer",
@@ -403,26 +398,26 @@ def train(config):
                 
 
                     
-                if total_step >= log_step:
-                    i = total_step // config.log_interval
-                    logging.info(utils.dct2str(dict(step=total_step, **metrics)))
-               #     wandb.log(utils.add_prefix(metrics, 'train'), step=total_step)
-                    logging.info(f"saving {i}th logging ckpts to {config.root_ckpt}_{i*1000}...")
-                    os.makedirs(config.root_ckpt, exist_ok=True)
-                    if not os.path.exists(config.root_ckpt + f"_{i*1000}"):
-                        os.makedirs(config.root_ckpt + f"_{i*1000}", exist_ok=True)
-                        logging.info("Mkdir {}".format(config.root_ckpt + f"_{i*1000}"))
+            #     if total_step >= log_step:
+            #         i = total_step // config.log_interval
+            #         logging.info(utils.dct2str(dict(step=total_step, **metrics)))
+            #    #     wandb.log(utils.add_prefix(metrics, 'train'), step=total_step)
+            #         logging.info(f"saving {i}th logging ckpts to {config.root_ckpt}_{i*1000}...")
+            #         os.makedirs(config.root_ckpt, exist_ok=True)
+            #         if not os.path.exists(config.root_ckpt + f"_{i*1000}"):
+            #             os.makedirs(config.root_ckpt + f"_{i*1000}", exist_ok=True)
+            #             logging.info("Mkdir {}".format(config.root_ckpt + f"_{i*1000}"))
                         
-                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + f"_{i*1000}")
-                    train_state.save_lora(os.path.join(config.root_ckpt + f"_{i*1000}", 'lora.pt.tmp'))
+            #         save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + f"_{i*1000}")
+            #         train_state.save_lora(os.path.join(config.root_ckpt + f"_{i*1000}", 'lora.pt.tmp'))
 
-                    log_step += config.log_interval
+            #         log_step += config.log_interval
        
-                if total_step == 1000:
-                    logging.info(f"saving final ckpts to {config.outdir}_11000...")
-                    save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_11000")
-                    # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
-                    train_state.save_lora(os.path.join(config.outdir + "_11000", 'lora.pt.tmp'))
+                # if total_step == 1000:
+                #     logging.info(f"saving final ckpts to {config.outdir}_11000...")
+                #     save_new_embed(text_encoder, modifier_token_id, accelerator, args, args.outdir + "_11000")
+                #     # train_state.save(os.path.join(config.outdir, 'final.ckpt'))
+                #     train_state.save_lora(os.path.join(config.outdir + "_11000", 'lora.pt.tmp'))
 
                 if total_step >= save_step:
                     

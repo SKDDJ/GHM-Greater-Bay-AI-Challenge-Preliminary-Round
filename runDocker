@@ -10,4 +10,6 @@
    docker run -it --gpus all --rm -v /home/schengwei/Competitionrepo/models:/workspace/models   -v /home/schengwei/.cache:/root/.cache   xiugo:v3
 
 
-   CUDA_VISIBLE_DEVICES=2
+   CUDA_VISIBLE_DEVICES=7
+
+docker run -it --gpus all --rm -v /home/schengwei/Competitionrepo/models:/workspace/models   -v /home/schengwei/.cache:/root/.cache -v /home/schengwei/.insightface:/root/.insightface  -e CUDA_VISIBLE_DEVICES=7 skddj/xiugo:v7

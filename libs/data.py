@@ -129,10 +129,6 @@ class PersonalizedBase(Dataset):
             ]
             
             # # 替换 prompt 如果传入的图片有背景的话
-            # for i in range(len(inst_img_path)):
-            #     path, text = inst_img_path[i]
-            #     if str(path).endswith('.jepg'):
-            #         inst_img_path[i] = (path, 'a <new1> boy in the room')
             for i in range(len(inst_img_path)):
                 path, text = inst_img_path[i]
                 if str(path).endswith('.jpeg'):
