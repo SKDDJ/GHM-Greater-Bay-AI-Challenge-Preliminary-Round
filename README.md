@@ -10,7 +10,7 @@
 
 ## 数据（必选）
 
-* 使用了CelebA（CelebFaces Attribute）人脸属性数据集，由香港中文大学开放提供，数据获取链接为http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html，随机获得200张男性人脸（在训练boy1和boy2模型时作为正则数据集使用）和200张女性人脸
+* 使用了CelebA（CelebFaces Attribute）人脸属性数据集，由香港中文大学开放提供，数据获取链接为[http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html)，随机获得200张男性人脸（在训练boy1和boy2模型时作为正则数据集使用）和200张女性人脸
 
   * 在训练girl1和girl2模型时作为正则数据集使用
 * 对官方提供的数据集进行移除背景和裁剪人像的操作，放进train_data_crop文件夹内
